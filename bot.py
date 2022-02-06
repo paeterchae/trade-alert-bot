@@ -9,7 +9,8 @@ import asyncio
 import json
 
 #logging
-logging.basicConfig(filename='bot.log', filemode='w', level=logging.INFO)
+logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", datefmt="%H:%M:%S",
+                    filename='bot.log', filemode='w', level=logging.INFO)
 
 load_dotenv()
 
@@ -33,7 +34,7 @@ async def read_stream():
 
     def print_message(message):
       print(json.dumps(message, indent=4))
-      
+
     stream_client.add_nasdaq_book_handler(print_message)
     await stream_client.nasdaq_book_subs(['GOOG'])
 
