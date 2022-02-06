@@ -4,6 +4,9 @@ from discord.ext import commands
 from tda import auth
 from dotenv import load_dotenv
 import logging
+from tda.streaming import StreamClient
+import asyncio
+import json
 
 #logging
 logging.basicConfig(filename='bot.log', filemode='w', level=logging.INFO)
@@ -14,12 +17,32 @@ load_dotenv()
 token_path = 'token.json'
 api_key = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
+account_id = os.getenv("ACCOUNT_ID")
 
 #oauth
 try:
-    c = auth.client_from_token_file(token_path, api_key)
+    client = auth.client_from_token_file(token_path, api_key)
 except FileNotFoundError:
     print("Token file not found")
+
+stream_client = StreamClient(client)
+
+async def read_stream():
+    await stream_client.login()
+    await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
+
+    def print_message(message):
+      print(json.dumps(message, indent=4))
+      
+    stream_client.add_nasdaq_book_handler(print_message)
+    await stream_client.nasdaq_book_subs(['GOOG'])
+
+    while True:
+        await stream_client.handle_message()
+
+asyncio.run(read_stream())
+
+#Discord Bot
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -42,5 +65,5 @@ async def nine_nine(ctx):
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
-    
+
 bot.run(TOKEN)
