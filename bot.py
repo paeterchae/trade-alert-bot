@@ -32,12 +32,9 @@ async def read_stream():
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
 
-    def print_message(message):
-      print(json.dumps(message, indent=4))
-
-    stream_client.add_nasdaq_book_handler(print_message)
-    await stream_client.nasdaq_book_subs(['GOOG'])
-
+    stream_client.add_account_activity_handler(lambda msg: print(json.dumps(msg, indent=4)))
+    await stream_client.account_activity_sub()
+ 
     while True:
         await stream_client.handle_message()
 
