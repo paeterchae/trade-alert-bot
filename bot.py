@@ -15,14 +15,14 @@ logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", da
 load_dotenv()
 
 #const
-token_path = 'token.json'
-api_key = os.getenv('API_KEY')
+TOKEN_PATH = 'token.json'
+API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
-account_id = os.getenv("ACCOUNT_ID")
+ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 
 #oauth
 try:
-    client = auth.client_from_token_file(token_path, api_key)
+    client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 except FileNotFoundError:
     print("Token file not found")
 
