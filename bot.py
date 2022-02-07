@@ -1,11 +1,9 @@
 import os
-import random
 from discord.ext import commands
 from tda import auth
 from dotenv import load_dotenv
 import logging
 from tda.streaming import StreamClient
-import asyncio
 import json
 
 #logging
@@ -20,45 +18,32 @@ API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
 ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 
-#oauth
-try:
-    client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
-except FileNotFoundError:
-    print("Token file not found")
+def oauth(TOKEN_PATH, API_KEY):
+    try:
+        client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
+        return client
+    except FileNotFoundError:
+        print("Token file not found")
 
-stream_client = StreamClient(client)
+def filter(msg):
+    return json.dumps(msg, indent=4)
 
-async def read_stream():
+bot = commands.Bot(command_prefix='!')
+
+@bot.command(name="alert", help="Begins streaming from account")
+async def read_stream(ctx):
+    stream_client = StreamClient(oauth(TOKEN_PATH, API_KEY))
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
+    
+    async def send_response(msg):
+        await ctx.send(filter(msg))
 
-    stream_client.add_account_activity_handler(lambda msg: print(json.dumps(msg, indent=4)))
+    stream_client.add_account_activity_handler(send_response)
     await stream_client.account_activity_sub()
  
     while True:
         await stream_client.handle_message()
-
-asyncio.run(read_stream())
-
-#Discord Bot
-
-TOKEN = os.getenv('DISCORD_TOKEN')
-
-bot = commands.Bot(command_prefix='!', help="sdf")
-
-@bot.command(name='99')
-async def nine_nine(ctx):
-    brooklyn_99_quotes = [
-        'I\'m the human form of the 💯 emoji.',
-        'Bingpot!',
-        (
-            'Cool. Cool cool cool cool cool cool cool, '
-            'no doubt no doubt no doubt no doubt.'
-        ),
-    ]
-
-    response = random.choice(brooklyn_99_quotes)
-    await ctx.send(response)
 
 @bot.event
 async def on_ready():
