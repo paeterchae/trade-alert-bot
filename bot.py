@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import logging
 from tda.streaming import StreamClient
 import json
+import xmltodict
 
 #logging
 logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", datefmt="%H:%M:%S",
@@ -26,7 +27,10 @@ def oauth(TOKEN_PATH, API_KEY):
         print("Token file not found")
 
 def filter(msg):
-    return json.dumps(msg, indent=4)
+    if msg["content"][0]["MESSAGE_TYPE"] == "SUBSCRIBED":
+        return "Account stream has begun"
+    else:
+        return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
 
 bot = commands.Bot(command_prefix='!')
 

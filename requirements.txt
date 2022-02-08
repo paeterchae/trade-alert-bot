@@ -1,3 +1,4 @@
 discord.py
 tda-api
 python-dotenv
+xmltodict
