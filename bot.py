@@ -21,8 +21,7 @@ ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 
 def oauth(TOKEN_PATH, API_KEY):
     try:
-        client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
-        return client
+        return auth.client_from_token_file(TOKEN_PATH, API_KEY)
     except FileNotFoundError:
         print("Token file not found")
 
@@ -33,6 +32,8 @@ def filter(msg):
         return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
 
 bot = commands.Bot(command_prefix='!')
+
+streaming = True
 
 @bot.command(name="alert", help="Begins streaming from account")
 async def read_stream(ctx):
@@ -46,8 +47,23 @@ async def read_stream(ctx):
     stream_client.add_account_activity_handler(send_response)
     await stream_client.account_activity_sub()
  
-    while True:
+    while streaming:
         await stream_client.handle_message()
+
+@bot.command(name="end", help="Ends streaming from account")
+async def unsub(ctx):
+    global streaming
+    streaming = False
+
+    stream_client = StreamClient(oauth(TOKEN_PATH, API_KEY))
+    await stream_client.login()
+    await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
+
+    await stream_client.account_activity_unsubs()
+
+    streaming = True
+
+    await ctx.send("Account stream has concluded")
 
 @bot.event
 async def on_ready():
