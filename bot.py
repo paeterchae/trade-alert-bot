@@ -18,7 +18,7 @@ load_dotenv()
 TOKEN_PATH = 'token.json'
 API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
-HS_COLOR = 0x50f276
+COLOR = 0x50f276
 
 def oauth(TOKEN_PATH, API_KEY):
     try:
@@ -47,13 +47,20 @@ def filter(msg):
             e.add_field(name="Limit Price", value=order["OrderPricing"]["Limit"], inline=True)
         e.add_field(name="Size", value=order["OriginalQuantity"])
         return format(e)
+    elif msg_type == "UROUT":
+        order = msg_data["UROUTMessage"]["Order"]
+        option = order["Security"]["Symbol"].split("_")
+        exp = option[1][:6]
+        cp = "Call" if option[1][6] == "C" else "Put"
+        e = Embed(title="Order Cancelled", description = "{} {} {} {}/{} {}".format(order["OrderInstructions"], option[0], option[1][7:], exp[:2], exp[2:4], cp))
+        return format(e)
     else:
         #return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
         return Embed.Empty
         #return ""
 
 def format(e=Embed):
-    e.color=HS_COLOR
+    e.color=COLOR
     e.set_author(name="Highstrike", url="https://highstrike.com/",
                 icon_url="https://www.highstriketrading.com/hosted/images/78/b23e71dc0b420c80120008ffeb837d/Circle-Logo.png")
     e.set_thumbnail(url="https://www.highstriketrading.com/hosted/images/78/b23e71dc0b420c80120008ffeb837d/Circle-Logo.png")
