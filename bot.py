@@ -18,13 +18,14 @@ load_dotenv()
 TOKEN_PATH = 'token.json'
 API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
+ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 COLOR = 0x50f276
 
-def oauth(TOKEN_PATH, API_KEY):
-    try:
-        return auth.client_from_token_file(TOKEN_PATH, API_KEY)
-    except FileNotFoundError:
-        print("Token file not found")
+client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
+stream_client = StreamClient(client)
+
+def parser(msg, msg_type):
+    pass
 
 def filter(msg):
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
@@ -36,16 +37,19 @@ def filter(msg):
         return format(Embed(title="Trade Alert Bot Activated"))
         #return "account stream has begun"
     elif msg_type == "OrderEntryRequest":
+        r = client.get_account(ACCOUNT_ID)
+        acc_value = r.json()["securitiesAccount"]["initialBalances"]["accountValue"]
         order = msg_data["OrderEntryRequestMessage"]["Order"]
         option = order["Security"]["Symbol"].split("_")
         exp = option[1][:6]
         cp = "Call" if option[1][6] == "C" else "Put"
         order_type = order["OrderType"]
+        size = str(int(float(order["OrderPricing"]["Limit"]) * 10000.0 * int(order["OriginalQuantity"]) / float(acc_value))) + "%"
         e = Embed(title="{} {} {} {}/{} {}".format(order["OrderInstructions"], option[0], option[1][7:], exp[:2], exp[2:4], cp), description = "Order Placed")
         e.add_field(name="Order Type", value=order_type, inline=True)
         if order_type == "Limit":
             e.add_field(name="Limit Price", value=order["OrderPricing"]["Limit"], inline=True)
-        e.add_field(name="Size", value=order["OriginalQuantity"])
+        e.add_field(name="Position Size", value=size)
         return format(e)
     elif msg_type == "UROUT":
         order = msg_data["UROUTMessage"]["Order"]
@@ -73,7 +77,7 @@ streaming = True
 
 @bot.command(name="alert", help="Begins streaming from account")
 async def read_stream(ctx):
-    stream_client = StreamClient(oauth(TOKEN_PATH, API_KEY))
+    stream_client = StreamClient(client)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
     
@@ -92,7 +96,7 @@ async def unsub(ctx):
     global streaming
     streaming = False
 
-    stream_client = StreamClient(oauth(TOKEN_PATH, API_KEY))
+    stream_client = StreamClient(client)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
 
@@ -101,6 +105,12 @@ async def unsub(ctx):
     streaming = True
 
     await ctx.send(embed=format(Embed(title="Trade Alert Bot Deactivated")))
+
+@bot.command(name="acc", help="acc")
+async def unsub(ctx):
+    r = client.get_account(ACCOUNT_ID)
+    await ctx.send(r.json()["securitiesAccount"]["initialBalances"]["accountValue"])
+
 
 @bot.event
 async def on_ready():
