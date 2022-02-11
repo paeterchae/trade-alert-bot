@@ -51,12 +51,12 @@ def filter(msg):
         return format(Embed(title="Trade Alert Bot Activated"))
         #return "account stream has begun"
     elif msg_type == "OrderEntryRequest":
-        size = str(int(float(limit_price) * 10000.0 * int(num_contracts) / float(acc_value))) + "%"
         e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp), description = "Order Placed")
         e.add_field(name="Order Type", value=order_type, inline=True)
+        #position size only visible if limit order
         if order_type == "Limit":
             e.add_field(name="Limit Price", value=limit_price, inline=True)
-        e.add_field(name="Position Size", value=size)
+            e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * int(num_contracts) / float(acc_value))) + "%")
         return format(e)
     elif msg_type == "UROUT":
         e = Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
