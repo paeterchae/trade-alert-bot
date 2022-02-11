@@ -22,7 +22,6 @@ ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 COLOR = 0x50f276
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
-stream_client = StreamClient(client)
 
 def parser(msg, msg_type):
     pass
