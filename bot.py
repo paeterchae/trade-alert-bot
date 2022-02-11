@@ -1,6 +1,7 @@
 import os
 from discord.ext import commands
 from discord import Embed
+from tda.client import Client
 from tda import auth
 from dotenv import load_dotenv
 import logging
@@ -23,39 +24,42 @@ COLOR = 0x50f276
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 
-def parser(msg, msg_type):
-    pass
+curr_positions = {}
+
+def parser(msg_data, msg_type):
+    order = msg_data[msg_type + "Message"]["Order"]
+    option = order["Security"]["Symbol"].split("_")
+    ticker = option[0]
+    strike = option[1][7:]
+    exp = option[1][:6][:2] + "/" + option[1][:6][2:4]
+    cp = "Call" if option[1][6] == "C" else "Put"
+    order_type = order["OrderType"]
+    bs = order["OrderInstructions"]
+    acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["initialBalances"]["accountValue"]
+    num_contracts = order["OriginalQuantity"]
+    limit_price = None if order_type != "Limit" else order["OrderPricing"]["Limit"]
+    return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price
 
 def filter(msg):
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
     try:
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
+        bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price = parser(msg_data, msg_type)
     except:
         pass
     if msg_type == "SUBSCRIBED":
         return format(Embed(title="Trade Alert Bot Activated"))
         #return "account stream has begun"
     elif msg_type == "OrderEntryRequest":
-        r = client.get_account(ACCOUNT_ID)
-        acc_value = r.json()["securitiesAccount"]["initialBalances"]["accountValue"]
-        order = msg_data["OrderEntryRequestMessage"]["Order"]
-        option = order["Security"]["Symbol"].split("_")
-        exp = option[1][:6]
-        cp = "Call" if option[1][6] == "C" else "Put"
-        order_type = order["OrderType"]
-        size = str(int(float(order["OrderPricing"]["Limit"]) * 10000.0 * int(order["OriginalQuantity"]) / float(acc_value))) + "%"
-        e = Embed(title="{} {} {} {}/{} {}".format(order["OrderInstructions"], option[0], option[1][7:], exp[:2], exp[2:4], cp), description = "Order Placed")
+        size = str(int(float(limit_price) * 10000.0 * int(num_contracts) / float(acc_value))) + "%"
+        e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp), description = "Order Placed")
         e.add_field(name="Order Type", value=order_type, inline=True)
         if order_type == "Limit":
-            e.add_field(name="Limit Price", value=order["OrderPricing"]["Limit"], inline=True)
+            e.add_field(name="Limit Price", value=limit_price, inline=True)
         e.add_field(name="Position Size", value=size)
         return format(e)
     elif msg_type == "UROUT":
-        order = msg_data["UROUTMessage"]["Order"]
-        option = order["Security"]["Symbol"].split("_")
-        exp = option[1][:6]
-        cp = "Call" if option[1][6] == "C" else "Put"
-        e = Embed(title="Order Cancelled", description = "{} {} {} {}/{} {}".format(order["OrderInstructions"], option[0], option[1][7:], exp[:2], exp[2:4], cp))
+        e = Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
         return format(e)
     else:
         #return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
@@ -108,7 +112,9 @@ async def unsub(ctx):
 @bot.command(name="acc", help="acc")
 async def unsub(ctx):
     r = client.get_account(ACCOUNT_ID)
-    await ctx.send(r.json()["securitiesAccount"]["initialBalances"]["accountValue"])
+    #await ctx.send(r.json()["securitiesAccount"]["initialBalances"]["accountValue"])
+    await ctx.send(json.dumps(r.json(), indent=4))
+    #await ctx.send(r.json().keys())
 
 
 @bot.event
