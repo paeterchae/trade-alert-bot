@@ -1,7 +1,6 @@
 import os
 from discord.ext import commands
 from discord import Embed
-from tda.client import Client
 from tda import auth
 from dotenv import load_dotenv
 import logging
@@ -80,7 +79,7 @@ streaming = True
 
 @bot.command(name="alert", help="Begins streaming from account")
 async def read_stream(ctx):
-    stream_client = StreamClient(client)
+    stream_client = StreamClient(client, account_id=ACCOUNT_ID)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
     
@@ -99,7 +98,7 @@ async def unsub(ctx):
     global streaming
     streaming = False
 
-    stream_client = StreamClient(client)
+    stream_client = StreamClient(client, account_id=ACCOUNT_ID)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
 
