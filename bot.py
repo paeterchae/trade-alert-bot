@@ -77,8 +77,7 @@ def filter(msg):
         e.description = "Order Filled"
         return format(e)
     elif msg_type == "UROUT":
-        e = Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
-        return format(e)
+        return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp)))
     else:
         return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
 
