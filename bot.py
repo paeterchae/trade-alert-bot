@@ -27,43 +27,60 @@ curr_positions = {}
 
 def parser(msg_data, msg_type):
     order = msg_data[msg_type + "Message"]["Order"]
-    option = order["Security"]["Symbol"].split("_")
+    symbol = order["Security"]["Symbol"]
+    option = symbol.split("_")
     ticker = option[0]
     strike = option[1][7:]
-    exp = option[1][:6][:2] + "/" + option[1][:6][2:4]
+    exp = option[1][:6][:2] + "/" + option[1][:6][2:4] + "/" + option[1][:6][4:6]
     cp = "Call" if option[1][6] == "C" else "Put"
     order_type = order["OrderType"]
     bs = order["OrderInstructions"]
-    acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["initialBalances"]["accountValue"]
     num_contracts = order["OriginalQuantity"]
+    if bs == "Sell":
+        bs = "Trim" if curr_positions[symbol] - num_contracts > 0 else "Exit"
+    acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["initialBalances"]["accountValue"]
     limit_price = None if order_type != "Limit" else order["OrderPricing"]["Limit"]
-    return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price
+    return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol
+
+def update_positions(bs, symbol, num_contracts):
+    #only geared for scalping options (buy then sell)
+    if curr_positions.get(symbol) == None:
+        curr_positions[symbol] = num_contracts
+    elif bs == "Buy":
+        curr_positions[symbol] += num_contracts
+    else:
+        curr_positions[symbol] -= num_contracts
+        if curr_positions.get(symbol) == 0:
+            del curr_positions[symbol]
+        
 
 def filter(msg):
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
     try:
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
-        bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price = parser(msg_data, msg_type)
-    except:
-        pass
-    if msg_type == "SUBSCRIBED":
-        return format(Embed(title="Trade Alert Bot Activated"))
-        #return "account stream has begun"
-    elif msg_type == "OrderEntryRequest":
-        e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp), description = "Order Placed")
+        bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol = parser(msg_data, msg_type)
+        e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
         e.add_field(name="Order Type", value=order_type, inline=True)
         #position size only visible if limit order
         if order_type == "Limit":
             e.add_field(name="Limit Price", value=limit_price, inline=True)
             e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * int(num_contracts) / float(acc_value))) + "%")
+    except:
+        pass
+    if msg_type == "SUBSCRIBED":
+        return format(Embed(title="Trade Alert Bot Activated"))
+    elif msg_type == "OrderEntryRequest":
+        e.description = "Order Placed"
+        return format(e)
+    elif msg_type == "OrderFill":
+        update_positions(bs, symbol, num_contracts)
+        e.description = "Order Filled"
         return format(e)
     elif msg_type == "UROUT":
         e = Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
         return format(e)
     else:
-        #return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
-        return Embed.Empty
-        #return ""
+        return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
 
 def format(e=Embed):
     e.color=COLOR
@@ -84,8 +101,10 @@ async def read_stream(ctx):
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
     
     async def send_response(msg):
-        await ctx.send(embed=filter(msg))
-        #await ctx.send(filter(msg))
+        if isinstance(filter(msg), Embed):
+            await ctx.send(embed=filter(msg))
+        else:
+            await ctx.send(filter(msg))
 
     stream_client.add_account_activity_handler(send_response)
     await stream_client.account_activity_sub()
@@ -114,7 +133,6 @@ async def unsub(ctx):
     #await ctx.send(r.json()["securitiesAccount"]["initialBalances"]["accountValue"])
     await ctx.send(json.dumps(r.json(), indent=4))
     #await ctx.send(r.json().keys())
-
 
 @bot.event
 async def on_ready():
