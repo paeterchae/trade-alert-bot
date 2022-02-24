@@ -95,7 +95,8 @@ streaming = True
 
 @bot.command(name="alert", help="Begins streaming from account")
 async def read_stream(ctx):
-    stream_client = StreamClient(client, account_id=ACCOUNT_ID)
+    #stream_client = StreamClient(client, account_id=ACCOUNT_ID)
+    stream_client = StreamClient(client)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
     
@@ -116,7 +117,8 @@ async def unsub(ctx):
     global streaming
     streaming = False
 
-    stream_client = StreamClient(client, account_id=ACCOUNT_ID)
+    #stream_client = StreamClient(client, account_id=ACCOUNT_ID)
+    stream_client = StreamClient(client)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
 
