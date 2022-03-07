@@ -15,7 +15,7 @@ logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", da
 load_dotenv()
 
 #const
-TOKEN_PATH = 'token.json'
+TOKEN_PATH = 'test_token.json'
 API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
 ACCOUNT_ID = os.getenv("ACCOUNT_ID")
@@ -38,7 +38,7 @@ def parser(msg_data, msg_type):
     num_contracts = order["OriginalQuantity"]
     if bs == "Sell":
         bs = "Trim" if curr_positions[symbol] - num_contracts > 0 else "Exit"
-    acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["initialBalances"]["accountValue"]
+    acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else order["OrderPricing"]["Limit"]
     return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol
 
@@ -72,7 +72,7 @@ def filter(msg):
     elif msg_type == "OrderEntryRequest":
         e.description = "Order Placed"
         return format(e)
-    elif msg_type == "OrderFill":
+    elif msg_type == "OrderRoute":
         update_positions(bs, symbol, num_contracts)
         e.description = "Order Filled"
         return format(e)
@@ -95,8 +95,8 @@ streaming = True
 
 @bot.command(name="alert", help="Begins streaming from account")
 async def read_stream(ctx):
-    #stream_client = StreamClient(client, account_id=ACCOUNT_ID)
-    stream_client = StreamClient(client)
+    stream_client = StreamClient(client, account_id=ACCOUNT_ID)
+    #stream_client = StreamClient(client)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
     
@@ -117,8 +117,8 @@ async def unsub(ctx):
     global streaming
     streaming = False
 
-    #stream_client = StreamClient(client, account_id=ACCOUNT_ID)
-    stream_client = StreamClient(client)
+    stream_client = StreamClient(client, account_id=ACCOUNT_ID)
+    #stream_client = StreamClient(client)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
 
