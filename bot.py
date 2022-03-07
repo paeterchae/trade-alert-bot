@@ -72,6 +72,10 @@ def filter(msg):
         e.color = 0xF7FF00
         e.description = "Order Placed"
         return format(e)
+    elif msg_type == "OrderCancelReplaceRequest":
+        e.color = 0xF7FF00
+        e.description = "Replacement Order Placed"
+        return format(e)
     elif msg_type == "OrderRoute":
         update_positions(bs, symbol, num_contracts)
         e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
