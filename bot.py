@@ -19,7 +19,6 @@ TOKEN_PATH = 'test_token.json'
 API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
 ACCOUNT_ID = os.getenv("ACCOUNT_ID")
-COLOR = 0x50f276
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 
@@ -70,19 +69,21 @@ def filter(msg):
     if msg_type == "SUBSCRIBED":
         return format(Embed(title="Trade Alert Bot Activated"))
     elif msg_type == "OrderEntryRequest":
+        e.color = 0xF7FF00
         e.description = "Order Placed"
         return format(e)
     elif msg_type == "OrderRoute":
         update_positions(bs, symbol, num_contracts)
+        e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
         e.description = "Order Filled"
         return format(e)
     elif msg_type == "UROUT":
+        e.color = 0xFF8B00
         return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp)))
     else:
         return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
 
 def format(e=Embed):
-    e.color=COLOR
     e.set_author(name="Highstrike", url="https://highstrike.com/",
                 icon_url="https://www.highstriketrading.com/hosted/images/78/b23e71dc0b420c80120008ffeb837d/Circle-Logo.png")
     e.set_thumbnail(url="https://www.highstriketrading.com/hosted/images/78/b23e71dc0b420c80120008ffeb837d/Circle-Logo.png")
@@ -129,7 +130,7 @@ async def unsub(ctx):
     await ctx.send(embed=format(Embed(title="Trade Alert Bot Deactivated")))
 
 @bot.command(name="acc", help="acc")
-async def unsub(ctx):
+async def acc(ctx):
     r = client.get_account(ACCOUNT_ID)
     #await ctx.send(r.json()["securitiesAccount"]["initialBalances"]["accountValue"])
     await ctx.send(json.dumps(r.json(), indent=4))
