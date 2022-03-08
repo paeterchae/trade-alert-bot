@@ -34,7 +34,7 @@ def parser(msg_data, msg_type):
     cp = "Call" if option[1][6] == "C" else "Put"
     order_type = order["OrderType"]
     bs = order["OrderInstructions"]
-    num_contracts = order["OriginalQuantity"]
+    num_contracts = int(order["OriginalQuantity"])
     if bs == "Sell":
         bs = "Trim" if curr_positions[symbol] - num_contracts > 0 else "Exit"
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
@@ -76,7 +76,7 @@ def filter(msg):
         #position size only visible if limit order
         if order_type == "Limit":
             e.add_field(name="Limit Price", value=limit_price, inline=True)
-            e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * int(num_contracts) / float(acc_value))) + "%")
+            e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * num_contracts / float(acc_value))) + "%")
         if msg_type == "OrderEntryRequest":
             e.color = 0xF7FF00
             e.description = "Order Placed"
