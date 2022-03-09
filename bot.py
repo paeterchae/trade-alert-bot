@@ -86,7 +86,7 @@ def filter(msg):
             e.description = "Replacement Order Placed"
             return format(e)
         elif msg_type == "OrderFill":
-            update_positions(bs, symbol, num_contracts)
+            #update_positions(bs, symbol, num_contracts)
             e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
             e.description = "Order Filled"
             return format(e)
