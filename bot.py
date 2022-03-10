@@ -10,7 +10,7 @@ import xmltodict
 
 #logging
 logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", datefmt="%H:%M:%S",
-                    filename='bot.log', filemode='w', level=logging.INFO)
+                    filename='bot1.log', filemode='w', level=logging.INFO)
 
 load_dotenv()
 
@@ -22,7 +22,7 @@ ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 
-curr_positions = {}
+curr_positions = {"test": 1, "test2": 3}
 
 def parser(msg_data, msg_type):
     order = msg_data[msg_type + "Message"]["Order"]
@@ -55,17 +55,6 @@ def update_positions(bs, symbol, num_contracts):
 
 def filter(msg):
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
-    """try:
-        msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
-        bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol = parser(msg_data, msg_type)
-        e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
-        e.add_field(name="Order Type", value=order_type, inline=True)
-        #position size only visible if limit order
-        if order_type == "Limit":
-            e.add_field(name="Limit Price", value=limit_price, inline=True)
-            e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * int(num_contracts) / float(acc_value))) + "%")
-    except:
-        pass"""
     if msg_type == "SUBSCRIBED":
         return format(Embed(title="Trade Alert Bot Activated"))
     else:
@@ -77,30 +66,29 @@ def filter(msg):
         if order_type == "Limit":
             e.add_field(name="Limit Price", value=limit_price, inline=True)
             e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * num_contracts / float(acc_value))) + "%")
-        if msg_type == "OrderEntryRequest":
-            e.color = 0xF7FF00
-            e.description = "Order Placed"
-            return format(e)
-        elif msg_type == "OrderCancelReplaceRequest":
-            e.color = 0xF7FF00
-            e.description = "Replacement Order Placed"
-            return format(e)
-        elif msg_type == "OrderFill":
-            #update_positions(bs, symbol, num_contracts)
-            e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
-            e.description = "Order Filled"
-            return format(e)
-        elif msg_type == "OrderRoute":
-            update_positions(bs, symbol, num_contracts)
-            e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
-            e.description = "Order Routed"
-            return format(e)
-        elif msg_type == "UROUT":
-            e.color = 0xFF8B00
-            return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp)))
-        else:
-            #return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
-            return msg["content"][0]
+        try:
+            if msg_type == "OrderEntryRequest":
+                e.color = 0xF7FF00
+                e.description = "Order Placed"
+                return format(e)
+            elif msg_type == "OrderCancelReplaceRequest":
+                e.color = 0xF7FF00
+                e.description = "Replacement Order Placed"
+                return format(e)
+            elif msg_type == "OrderFill":
+                print("Before Fill: " + curr_positions)
+                update_positions(bs, symbol, num_contracts)
+                print("After Fill: " + curr_positions)
+                e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
+                e.description = "Order Filled"
+                return format(e)
+            elif msg_type == "UROUT":
+                return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
+            else:
+                return msg["content"][0]
+        except:
+            return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
+            #return msg["content"][0]
 
 def format(e=Embed):
     e.set_author(name="Highstrike", url="https://highstrike.com/",
@@ -154,6 +142,10 @@ async def acc(ctx):
     #await ctx.send(r.json()["securitiesAccount"]["initialBalances"]["accountValue"])
     await ctx.send(json.dumps(r.json(), indent=4))
     #await ctx.send(r.json().keys())
+
+@bot.command(name="status", help="status")
+async def status(ctx):
+    await ctx.send(curr_positions)
 
 @bot.event
 async def on_ready():
