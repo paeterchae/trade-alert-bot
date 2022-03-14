@@ -38,7 +38,7 @@ def parser(msg_data, msg_type):
     if bs == "Sell":
         bs = "Trim" if curr_positions[symbol] - num_contracts > 0 else "Exit"
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
-    limit_price = None if order_type != "Limit" else order["OrderPricing"]["Limit"]
+    limit_price = None if order_type != "Limit" else "{:0.2f}".format(int(order["OrderPricing"]["Limit"]))
     return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol
 
 def update_positions(bs, symbol, num_contracts):
