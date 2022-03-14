@@ -78,9 +78,11 @@ def filter(msg):
         e.description = "Replacement Order Placed"
         return format(e)
     elif msg_type == "OrderRoute":
-        print("Before Fill: " + curr_positions)
+        print("Before Fill: ")
+        print(curr_positions)
         update_positions(bs, symbol, num_contracts)
-        print("After Fill: " + curr_positions)
+        print("After Fill: ")
+        print(curr_positions)
         e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
         e.description = "Order Filled"
         return format(e)
@@ -88,9 +90,9 @@ def filter(msg):
         return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
     else:
         try:
-            return msg["content"][0]
-        except:
             return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=2)
+        except:
+            return msg["content"][0]
 
 def format(e=Embed):
     e.set_author(name="Highstrike", url="https://highstrike.com/",
