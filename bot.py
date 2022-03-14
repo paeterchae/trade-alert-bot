@@ -55,7 +55,9 @@ def update_positions(bs, symbol, num_contracts):
 
 def filter(msg):
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
-    try:
+    if msg_type == "SUBSCRIBED":
+        return format(Embed(title="Trade Alert Bot Activated"))
+    else:
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol = parser(msg_data, msg_type)
         e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
@@ -64,35 +66,27 @@ def filter(msg):
         if order_type == "Limit":
             e.add_field(name="Limit Price", value=limit_price, inline=True)
             e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * num_contracts / float(acc_value))) + "%")
-    except:
-        if msg_type == "SUBSCRIBED":
-            return format(Embed(title="Trade Alert Bot Activated"))
+        if msg_type == "OrderEntryRequest":
+            e.color = 0xF7FF00
+            e.description = "Order Placed"
+            return format(e)
+        elif msg_type == "OrderCancelReplaceRequest":
+            e.color = 0xF7FF00
+            e.description = "Replacement Order Placed"
+            return format(e)
+        elif msg_type == "OrderRoute":
+            print("Before Fill: ")
+            print(curr_positions)
+            update_positions(bs, symbol, num_contracts)
+            print("After Fill: ")
+            print(curr_positions)
+            e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
+            e.description = "Order Filled"
+            return format(e)
+        elif msg_type == "UROUT":
+            return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
         else:
             return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
-    if msg_type == "OrderEntryRequest":
-        e.color = 0xF7FF00
-        e.description = "Order Placed"
-        return format(e)
-    elif msg_type == "OrderCancelReplaceRequest":
-        e.color = 0xF7FF00
-        e.description = "Replacement Order Placed"
-        return format(e)
-    elif msg_type == "OrderRoute":
-        print("Before Fill: ")
-        print(curr_positions)
-        update_positions(bs, symbol, num_contracts)
-        print("After Fill: ")
-        print(curr_positions)
-        e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
-        e.description = "Order Filled"
-        return format(e)
-    elif msg_type == "UROUT":
-        return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
-    else:
-        try:
-            return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=2)
-        except:
-            return msg["content"][0]
 
 def format(e=Embed):
     e.set_author(name="Highstrike", url="https://highstrike.com/",
