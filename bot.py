@@ -22,7 +22,7 @@ ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 
-curr_positions = {'SPY_031622P420': 2}
+curr_positions = {}
 
 def parser(msg_data, msg_type):
     try:
