@@ -22,10 +22,13 @@ ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 
-curr_positions = {"test": 1, "test2": 3}
+curr_positions = {'SPY_031622P420': 2}
 
 def parser(msg_data, msg_type):
-    order = msg_data[msg_type + "Message"]["Order"]
+    try:
+        order = msg_data[msg_type + "Message"]["Order"]
+    except KeyError:
+        return 1,2,3,4,5,6,7,8,9,10
     symbol = order["Security"]["Symbol"]
     option = symbol.split("_")
     ticker = option[0]
@@ -38,7 +41,7 @@ def parser(msg_data, msg_type):
     if bs == "Sell":
         bs = "Trim" if curr_positions[symbol] - num_contracts > 0 else "Exit"
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
-    limit_price = None if order_type != "Limit" else "{:0.2f}".format(int(order["OrderPricing"]["Limit"]))
+    limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
     return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol
 
 def update_positions(bs, symbol, num_contracts):
@@ -60,6 +63,9 @@ def filter(msg):
     else:
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol = parser(msg_data, msg_type)
+        if bs == 1:
+            print(json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4))
+            return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
         e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
         e.add_field(name="Order Type", value=order_type, inline=True)
         #position size only visible if limit order
@@ -77,9 +83,11 @@ def filter(msg):
         elif msg_type == "OrderRoute":
             print("Before Fill: ")
             print(curr_positions)
+            print("")
             update_positions(bs, symbol, num_contracts)
             print("After Fill: ")
             print(curr_positions)
+            print("")
             e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
             e.description = "Order Filled"
             return format(e)
