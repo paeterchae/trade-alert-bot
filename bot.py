@@ -25,10 +25,7 @@ client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 curr_positions = {}
 
 def parser(msg_data, msg_type):
-    try:
-        order = msg_data[msg_type + "Message"]["Order"]
-    except KeyError:
-        return 1,2,3,4,5,6,7,8,9,10
+    order = msg_data[msg_type + "Message"]["Order"]
     symbol = order["Security"]["Symbol"]
     option = symbol.split("_")
     ticker = option[0]
@@ -60,12 +57,11 @@ def filter(msg):
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
     if msg_type == "SUBSCRIBED":
         return format(Embed(title="Trade Alert Bot Activated"))
+    elif msg_type == "TransactionTrade":
+        return None
     else:
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol = parser(msg_data, msg_type)
-        if bs == 1:
-            print(json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4))
-            return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
         e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
         e.add_field(name="Order Type", value=order_type, inline=True)
         #position size only visible if limit order
@@ -117,7 +113,7 @@ async def read_stream(ctx):
     async def send_response(msg):
         if isinstance(filter(msg), Embed):
             await ctx.send(embed=filter(msg))
-        else:
+        elif filter(msg) != None:
             await ctx.send(filter(msg))
 
     stream_client.add_account_activity_handler(send_response)
