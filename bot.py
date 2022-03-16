@@ -1,3 +1,4 @@
+from http.client import HTTPException
 import os
 from discord.ext import commands
 from discord import Embed
@@ -114,7 +115,15 @@ async def read_stream(ctx):
         if isinstance(filter(msg), Embed):
             await ctx.send(embed=filter(msg))
         elif filter(msg) != None:
-            await ctx.send(filter(msg))
+            try:
+                await ctx.send(filter(msg))
+            except HTTPException as e:
+                with open("error.log", "w") as file:
+                    file.write(e + "\n")
+                    file.write(filter(msg))
+                    print(e)
+                    print(filter(msg))
+                file.close()
 
     stream_client.add_account_activity_handler(send_response)
     await stream_client.account_activity_sub()
@@ -141,9 +150,7 @@ async def unsub(ctx):
 @bot.command(name="acc", help="acc")
 async def acc(ctx):
     r = client.get_account(ACCOUNT_ID)
-    #await ctx.send(r.json()["securitiesAccount"]["initialBalances"]["accountValue"])
     await ctx.send(json.dumps(r.json(), indent=4))
-    #await ctx.send(r.json().keys())
 
 @bot.command(name="status", help="status")
 async def status(ctx):
