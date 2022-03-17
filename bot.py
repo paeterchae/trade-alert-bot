@@ -76,7 +76,7 @@ def filter(msg):
             e.color = 0xF7FF00
             e.description = "Replacement Order Placed"
             return format(e)
-        elif msg_type == "OrderRoute":
+        elif msg_type == "OrderFill":
             print("Before Fill: ")
             print(curr_positions)
             print("")
