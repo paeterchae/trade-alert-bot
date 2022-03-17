@@ -1,4 +1,3 @@
-from http.client import HTTPException
 import os
 from discord.ext import commands
 from discord import Embed
@@ -117,11 +116,9 @@ async def read_stream(ctx):
         elif filter(msg) != None:
             try:
                 await ctx.send(filter(msg))
-            except HTTPException as e:
+            except:
                 with open("error.log", "w") as file:
-                    file.write(e + "\n")
                     file.write(filter(msg))
-                    print(e)
                     print(filter(msg))
                 file.close()
 
