@@ -79,18 +79,24 @@ def filter(msg):
         elif msg_type == "OrderFill":
             print("Before Fill: ")
             print(curr_positions)
-            print("")
             update_positions(bs, symbol, num_contracts)
             print("After Fill: ")
             print(curr_positions)
             print("")
             e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
             e.description = "Order Filled"
+            with open("fill.log", "w") as file:
+                file.write(json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4))
+                file.write(curr_positions)
+            file.close()
             return format(e)
         elif msg_type == "UROUT":
             return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
         else:
-            return json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4)
+            with open("message.log", "w") as file:
+                file.write(json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4))
+            file.close()
+            return None
 
 def format(e=Embed):
     e.set_author(name="Highstrike", url="https://highstrike.com/",
