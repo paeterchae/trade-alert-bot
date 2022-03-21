@@ -87,7 +87,6 @@ def filter(msg):
             e.description = "Order Filled"
             with open("fill.log", "w") as file:
                 file.write(json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4))
-                file.write(curr_positions)
             file.close()
             return format(e)
         elif msg_type == "UROUT":
