@@ -36,7 +36,10 @@ def parser(msg_data, msg_type):
     bs = order["OrderInstructions"]
     num_contracts = int(order["OriginalQuantity"])
     if bs == "Sell":
-        bs = "Trim" if curr_positions[symbol] - num_contracts > 0 else "Exit"
+        try:
+            bs = "Trim" if curr_positions[symbol] - num_contracts > 0 else "Exit"
+        except KeyError:
+            pass
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
     return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol
