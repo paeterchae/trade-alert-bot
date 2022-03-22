@@ -5,6 +5,7 @@ from tda import auth
 from dotenv import load_dotenv
 import logging
 from tda.streaming import StreamClient
+from tda.client import Client
 import json
 import xmltodict
 
@@ -154,7 +155,7 @@ async def unsub(ctx):
 
 @bot.command(name="acc", help="acc")
 async def acc(ctx):
-    r = client.get_account(ACCOUNT_ID)
+    r = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS)
     await ctx.send(json.dumps(r.json(), indent=4))
 
 @bot.command(name="status", help="status")
