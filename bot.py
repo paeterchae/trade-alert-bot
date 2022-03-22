@@ -89,14 +89,14 @@ def filter(msg):
             print("")
             e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
             e.description = "Order Filled"
-            with open("fill.log", "w") as file:
+            with open("fill.log", "a+") as file:
                 file.write(json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4))
             file.close()
             return format(e)
         elif msg_type == "UROUT":
             return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
         else:
-            with open("message.log", "w") as file:
+            with open("message.log", "a+") as file:
                 file.write(json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4))
             file.close()
             return None
@@ -126,7 +126,7 @@ async def read_stream(ctx):
             try:
                 await ctx.send(filter(msg))
             except:
-                with open("error.log", "w") as file:
+                with open("error.log", "a+") as file:
                     file.write(filter(msg))
                     print(filter(msg))
                 file.close()
@@ -156,7 +156,10 @@ async def unsub(ctx):
 @bot.command(name="acc", help="acc")
 async def acc(ctx):
     r = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS)
-    await ctx.send(json.dumps(r.json(), indent=4))
+    with open("position.log", "a+") as file:
+        file.write(json.dumps(r.json(), indent=4))
+    file.close()
+    #await ctx.send(json.dumps(r.json(), indent=4))
 
 @bot.command(name="status", help="status")
 async def status(ctx):
