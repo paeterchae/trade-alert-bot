@@ -40,10 +40,15 @@ def parser(msg_data, msg_type):
         try:
             bs = "Trim" if curr_positions[symbol] - num_contracts > 0 else "Exit"
         except KeyError:
-            pass
+            r = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS)
+            with open("position.log", "a+") as file:
+                file.write(json.dumps(r.json(), indent=4))
+            file.close()
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
-    return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol
+    bid = "{:0.2f}".format(float(order["OrderPricing"]["Bid"]))
+    ask = "{:0.2f}".format(float(order["OrderPricing"]["Ask"]))
+    return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol, bid, ask
 
 def update_positions(bs, symbol, num_contracts):
     #only geared for scalping options (buy then sell)
@@ -65,13 +70,17 @@ def filter(msg):
         return None
     else:
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
-        bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol = parser(msg_data, msg_type)
+        bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, symbol, bid, ask = parser(msg_data, msg_type)
         e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
         e.add_field(name="Order Type", value=order_type, inline=True)
         #position size only visible if limit order
         if order_type == "Limit":
             e.add_field(name="Limit Price", value=limit_price, inline=True)
             e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * num_contracts / float(acc_value))) + "%")
+        elif order_type == "Market":
+            e.add_field(name="Bid", value=bid, inline=True)
+            e.add_field(name="Ask", value=ask, inline=True)
+            e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * 10000.0 * num_contracts / float(acc_value))) + "%")
         if msg_type == "OrderEntryRequest":
             e.color = 0xF7FF00
             e.description = "Order Placed"
@@ -89,6 +98,7 @@ def filter(msg):
             print("")
             e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
             e.description = "Order Filled"
+            e.add_field(name="Fill Price", value=str(msg_data["OrderFillMessage"]["ExecutionInformation"]["ExecutionPrice"]), inline=True)
             with open("fill.log", "a+") as file:
                 file.write(json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4))
             file.close()
@@ -155,11 +165,8 @@ async def unsub(ctx):
 
 @bot.command(name="acc", help="acc")
 async def acc(ctx):
-    r = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS)
-    with open("position.log", "a+") as file:
-        file.write(json.dumps(r.json(), indent=4))
-    file.close()
-    #await ctx.send(json.dumps(r.json(), indent=4))
+    r = client.get_account(ACCOUNT_ID)
+    await ctx.send(json.dumps(r.json(), indent=4))
 
 @bot.command(name="status", help="status")
 async def status(ctx):
