@@ -8,6 +8,7 @@ from tda.streaming import StreamClient
 from tda.client import Client
 import json
 import xmltodict
+import asyncio
 
 #logging
 logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", datefmt="%H:%M:%S",
@@ -154,7 +155,7 @@ async def unsub(ctx):
 async def acc(ctx):
     r = client.get_account(ACCOUNT_ID)
     await ctx.send(json.dumps(r.json(), indent=4))
-    slow_count.start()
+    slow_count.stop()
 
 @bot.command(name="pos", help="pos")
 async def pos(ctx):
@@ -170,12 +171,13 @@ async def pos(ctx):
 @bot.command(name="status", help="status")
 async def status(ctx):
     await ctx.send(curr_positions)
+    slow_count.start()
 
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
 
-@tasks.loop(seconds=1.0, count=5)
+@tasks.loop(seconds=1)
 async def slow_count():
     print(slow_count.current_loop)
 
