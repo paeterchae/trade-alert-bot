@@ -1,5 +1,5 @@
 import os
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import Embed
 from tda import auth
 from dotenv import load_dotenv
@@ -42,7 +42,7 @@ def parser(msg_data, msg_type):
         except KeyError:
             r = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS)
             with open("position.log", "a+") as file:
-                file.write(json.dumps(r.json(), indent=4))
+                file.write(json.dumps(r.json()["securitiesAccount"]["positions"], indent=4))
             file.close()
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
@@ -82,26 +82,13 @@ def filter(msg):
             e.add_field(name="Ask", value=ask, inline=True)
             e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * 10000.0 * num_contracts / float(acc_value))) + "%")
         if msg_type == "OrderEntryRequest":
-            e.color = 0xF7FF00
+            update_positions(bs, symbol, num_contracts)
             e.description = "Order Placed"
+            e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
             return format(e)
         elif msg_type == "OrderCancelReplaceRequest":
-            e.color = 0xF7FF00
-            e.description = "Replacement Order Placed"
-            return format(e)
-        elif msg_type == "OrderFill":
-            print("Before Fill: ")
-            print(curr_positions)
-            update_positions(bs, symbol, num_contracts)
-            print("After Fill: ")
-            print(curr_positions)
-            print("")
             e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
-            e.description = "Order Filled"
-            e.add_field(name="Fill Price", value=str(msg_data["OrderFillMessage"]["ExecutionInformation"]["ExecutionPrice"]), inline=True)
-            with open("fill.log", "a+") as file:
-                file.write(json.dumps(xmltodict.parse(msg["content"][0]["MESSAGE_DATA"]), indent=4))
-            file.close()
+            e.description = "Replacement Order Placed"
             return format(e)
         elif msg_type == "UROUT":
             return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
@@ -167,6 +154,18 @@ async def unsub(ctx):
 async def acc(ctx):
     r = client.get_account(ACCOUNT_ID)
     await ctx.send(json.dumps(r.json(), indent=4))
+    slow_count.start()
+
+@bot.command(name="pos", help="pos")
+async def pos(ctx):
+    r = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS)
+    try:
+        with open("position.log", "a+") as file:
+            file.write(json.dumps(r.json()["securitiesAccount"]["positions"], indent=4))
+        file.close()
+        await ctx.send(json.dumps(r.json()["securitiesAccount"]["positions"], indent=4))
+    except KeyError:
+        await ctx.send("No current positions")
 
 @bot.command(name="status", help="status")
 async def status(ctx):
@@ -175,5 +174,9 @@ async def status(ctx):
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
+
+@tasks.loop(seconds=1.0, count=5)
+async def slow_count():
+    print(slow_count.current_loop)
 
 bot.run(TOKEN)
