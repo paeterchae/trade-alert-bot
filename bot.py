@@ -173,6 +173,14 @@ async def status(ctx):
     await ctx.send(curr_positions)
     slow_count.start()
 
+#get_order v position update
+@bot.command(name="orders", help="orders")
+async def status(ctx):
+    r = client.get_orders_by_path(account_id=ACCOUNT_ID, status=Client.Order.Status.FILLED)
+    with open("order.log", "w") as file:
+        file.write(json.dumps(r.json(), indent=4))
+    file.close()
+
 @bot.event
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
