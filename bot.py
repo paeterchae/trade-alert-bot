@@ -49,7 +49,7 @@ def parser(msg_data, msg_type):
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
     bid = "{:0.2f}".format(float(order["OrderPricing"]["Bid"]))
     ask = "{:0.2f}".format(float(order["OrderPricing"]["Ask"]))
-    return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask
+    return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol
         
 def filter(msg):
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
@@ -59,8 +59,12 @@ def filter(msg):
         return None
     else:
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
-        bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask = parser(msg_data, msg_type)
-        e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
+        bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol = parser(msg_data, msg_type)
+        if bs == "Trim":
+            trim_percentage = str(num_contracts/curr_positions[symbol]["longQuantity"] * 100.0) + "%"
+            e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, strike, exp, cp))
+        else:
+            e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
         e.add_field(name="Order Type", value=order_type, inline=True)
         e.color = 0xFFFF00
         #position size only visible if limit order
