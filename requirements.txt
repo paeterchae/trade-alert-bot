@@ -10,7 +10,6 @@ cffi==1.15.0
 chardet==4.0.0
 charset-normalizer==2.0.11
 cryptography==36.0.1
-deepdiff==5.7.0
 discord.py==1.7.3
 h11==0.12.0
 httpcore==0.14.7

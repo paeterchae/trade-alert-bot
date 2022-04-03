@@ -8,7 +8,7 @@ from tda.streaming import StreamClient
 from tda.client import Client
 import json
 import xmltodict
-from deepdiff import DeepDiff
+import copy
 
 #logging
 logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", datefmt="%H:%M:%S",
@@ -16,7 +16,7 @@ logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", da
 
 load_dotenv()
 
-#const
+#const 
 TOKEN_PATH = 'test_token.json'
 API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -26,8 +26,7 @@ CHANNEL_ID = os.getenv('CHANNEL_ID')
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 
 #global variables
-curr_positions = []
-update = False
+curr_positions = {}
 streaming = True
 
 def parser(msg_data, msg_type):
@@ -42,7 +41,10 @@ def parser(msg_data, msg_type):
     bs = order["OrderInstructions"]
     num_contracts = int(order["OriginalQuantity"])
     if bs == "Sell":
-        bs = "Trim" if curr_positions[symbol] - num_contracts > 0 else "Exit"
+        if curr_positions[symbol]["longQuantity"] - num_contracts > 0:
+            bs = "Trim"
+        else:
+            bs = "Exit" if curr_positions[symbol]["currentDayProfitLossPercentage"] > 0 else "Cut"
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
     bid = "{:0.2f}".format(float(order["OrderPricing"]["Bid"]))
@@ -69,7 +71,6 @@ def filter(msg):
             e.add_field(name="Ask", value=ask, inline=True)
             e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * 10000.0 * num_contracts / float(acc_value))) + "%")
         if msg_type == "OrderEntryRequest":
-            update_positions(bs, symbol, num_contracts)
             e.description = "Order Placed"
             e.color = 0x50f276 if (bs == "Buy") else 0xFF0000
             return format(e)
@@ -93,8 +94,7 @@ bot = commands.Bot(command_prefix='!')
 
 @bot.command(name="alert", help="Begins streaming from account")
 async def read_stream(ctx):
-    stream_client = StreamClient(client, account_id=ACCOUNT_ID)
-    #stream_client = StreamClient(client)
+    stream_client = StreamClient(client)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
     
@@ -121,8 +121,7 @@ async def unsub(ctx):
     global streaming
     streaming = False
 
-    stream_client = StreamClient(client, account_id=ACCOUNT_ID)
-    #stream_client = StreamClient(client)
+    stream_client = StreamClient(client)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
 
@@ -168,167 +167,43 @@ async def slow_count():
     channel = bot.get_channel(int(CHANNEL_ID))
     await channel.send(slow_count.current_loop)
 
-async def order_fill():
-    #update curr_positions here
+async def order_fill(order, action, prev=None):
+    #symbol, longQuantity, marketValue, averagePrice, currentDayProfitLossPercentage
     channel = bot.get_channel(int(CHANNEL_ID))
     await channel.send("Filled")
 
-#figure out difference HERE
 @tasks.loop(seconds=1)
 async def update_positions():
     global curr_positions
-    global update
+    tmp = copy.deepcopy(curr_positions)
     try:
         new_positions = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS).json()["securitiesAccount"]["positions"]
-        #new positions taken or deleted
-        """if len(curr_positions) != len(new_positions):
-            order_fill(new_positions, 0)
-            update = True
-        else:
-            #additions or subtractions to existing positions
-            for old, new in zip(curr_positions, new_positions):
-                if old["longQuantity"] != new["longQuantity"] or old["shortQuantity"] != new["shortQuantity"]:
-                    update = True
-
-                    break"""
-        
-        #filter(lambda old: old["instrument"]["symbol"], curr_positions)
-
-        for i, (old, new) in enumerate(zip(curr_positions, new_positions)):
-            pass
-            #new purchase (len 0 v len 2), adjust quant of existing position (same len), deleted position (len 2 v len 0)
-        for i, pos in enumerate(new_positions):
+        tracked_positions = []
+        #addition or update
+        for pos in new_positions:
             symbol = pos["instrument"]["symbol"]
             amt = pos["longQuantity"]
-            if curr_positions.get(symbol) == None or amt > curr_positions[symbol]:
-                await order_fill(new_positions, i, "Buy")
-            elif amt < curr_positions[symbol]:
-                await order_fill(new_positions, i, "Sell")
-
+            tracked_positions.append(symbol)
+            curr_positions[symbol] = pos
+            if tmp.get(symbol) == None or amt > tmp[symbol]["longQuantity"]:
+                await order_fill(pos, "Buy")
+            elif amt < tmp[symbol]["longQuantity"]:
+                await order_fill(pos, "Trim", tmp)
+        #removal
+        for symbol in tmp.keys():
+            if symbol not in tracked_positions:
+                del curr_positions[symbol]
+                if tmp[symbol]["currentDayProfitLossPercentage"] > 0:
+                    await order_fill(tmp[symbol], "Exit")
+                else:
+                    await order_fill(tmp[symbol], "Cut")
     except KeyError:
-        if curr_positions != []:
-            curr_positions = []
-            update = True
-    if update:
-        await order_fill()
-        update = False
-
-test=[
-    {
-        "shortQuantity": 0.0,
-        "averagePrice": 3.02,
-        "currentDayCost": 302.0,
-        "currentDayProfitLoss": -0.5,
-        "currentDayProfitLossPercentage": -0.17,
-        "longQuantity": 5.0,
-        "settledLongQuantity": 0.0,
-        "settledShortQuantity": 0.0,
-        "instrument": {
-            "assetType": "OPTION",
-            "cusip": "0QQQ..D120370000",
-            "symbol": "QQQ_040122C370",
-            "description": "QQQ Apr 01 2022 370.0 Call",
-            "type": "VANILLA",
-            "putCall": "CALL",
-            "underlyingSymbol": "QQQ"
-        },
-        "marketValue": 301.5,
-        "maintenanceRequirement": 0.0,
-        "previousSessionLongQuantity": 0.0
-    },
-    {
-        "shortQuantity": 0.0,
-        "averagePrice": 2.32,
-        "currentDayCost": 232.0,
-        "currentDayProfitLoss": -3.5,
-        "currentDayProfitLossPercentage": -1.51,
-        "longQuantity": 1.0,
-        "settledLongQuantity": 0.0,
-        "settledShortQuantity": 0.0,
-        "instrument": {
-            "assetType": "OPTION",
-            "cusip": "0SPY..D120461000",
-            "symbol": "SPY_040122C461",
-            "description": "SPY Apr 01 2022 461.0 Call",
-            "type": "VANILLA",
-            "putCall": "CALL",
-            "underlyingSymbol": "SPY"
-        },
-        "marketValue": 228.5,
-        "maintenanceRequirement": 0.0,
-        "previousSessionLongQuantity": 0.0
-    }
-]
-
-test2=[
-    {
-        "shortQuantity": 0.0,
-        "averagePrice": 3.02,
-        "currentDayCost": 302.0,
-        "currentDayProfitLoss": -0.5,
-        "currentDayProfitLossPercentage": -0.17,
-        "longQuantity": 1.0,
-        "settledLongQuantity": 0.0,
-        "settledShortQuantity": 0.0,
-        "instrument": {
-            "assetType": "OPTION",
-            "cusip": "0QQQ..D120370000",
-            "symbol": "QQQ_040122C370",
-            "description": "QQQ Apr 01 2022 370.0 Call",
-            "type": "VANILLA",
-            "putCall": "CALL",
-            "underlyingSymbol": "QQQ"
-        },
-        "marketValue": 301.5,
-        "maintenanceRequirement": 0.0,
-        "previousSessionLongQuantity": 0.0
-    },
-    {
-        "shortQuantity": 0.0,
-        "averagePrice": 2.32,
-        "currentDayCost": 232.0,
-        "currentDayProfitLoss": -3.5,
-        "currentDayProfitLossPercentage": -1.51,
-        "longQuantity": 3.0,
-        "settledLongQuantity": 0.0,
-        "settledShortQuantity": 0.0,
-        "instrument": {
-            "assetType": "OPTION",
-            "cusip": "0SPY..D120461000",
-            "symbol": "SPY_040122C461",
-            "description": "SPY Apr 01 2022 461.0 Call",
-            "type": "VANILLA",
-            "putCall": "CALL",
-            "underlyingSymbol": "SPY"
-        },
-        "marketValue": 228.5,
-        "maintenanceRequirement": 0.0,
-        "previousSessionLongQuantity": 0.0
-    },
-    {
-        "shortQuantity": 0.0,
-        "averagePrice": 2.32,
-        "currentDayCost": 232.0,
-        "currentDayProfitLoss": -3.5,
-        "currentDayProfitLossPercentage": -1.51,
-        "longQuantity": 3.0,
-        "settledLongQuantity": 0.0,
-        "settledShortQuantity": 0.0,
-        "instrument": {
-            "assetType": "OPTION",
-            "cusip": "0SPY..D120461000",
-            "symbol": "SPY_040122C461",
-            "description": "SPYD Apr 01 2022 461.0 Call",
-            "type": "VANILLA",
-            "putCall": "CALL",
-            "underlyingSymbol": "SPY"
-        },
-        "marketValue": 228.5,
-        "maintenanceRequirement": 0.0,
-        "previousSessionLongQuantity": 0.0
-    }
-]
-
-print(DeepDiff(test,test2))
+        if tmp != {}:
+            curr_positions = {}
+            for symbol in tmp.keys():
+                if pos["currentDayProfitLossPercentage"] > 0:
+                    await order_fill(tmp[symbol], "Exit")
+                else:
+                    await order_fill(tmp[symbol], "Cut")
 
 bot.run(TOKEN)
