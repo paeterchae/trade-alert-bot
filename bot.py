@@ -12,7 +12,7 @@ import copy
 
 #logging
 logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", datefmt="%H:%M:%S",
-                    filename='bot.log', filemode='w', level=logging.INFO)
+                    filename='bot.log', filemode='w', level=logging.WARNING)
 
 load_dotenv()
 
