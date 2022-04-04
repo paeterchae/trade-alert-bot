@@ -161,8 +161,12 @@ async def acc(ctx):
     await ctx.send(json.dumps(r.json(), indent=4))
 
 @bot.command(name="pos", help="Displays active positions")
-async def status(ctx):
+async def pos(ctx):
     await ctx.send(curr_positions)
+
+@bot.command(name="req", help="Displays open request count")
+async def req(ctx):
+    await ctx.send("Open Requests: " + str(open_requests))
 
 async def order_fill(order, action, acc_value, prev=None):
     if order["instrument"]["assetType"] == "OPTION":
