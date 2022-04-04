@@ -179,7 +179,7 @@ async def order_fill(order, action, acc_value, prev=None):
             e = Embed(title="{} {} {} {} {}".format(action, ticker, strike, exp, cp))
         e.add_field(name="Average Cost", value=str(order["averagePrice"]))
         e.add_field(name="Market Price", value=str(order["marketValue"]/order["longQuantity"]/100.0))
-        e.add_field(name="P/L", value=str(order["currentDayProfitLossPercentage"])+"%")
+        e.add_field(name="Profit/Loss", value=str(order["currentDayProfitLossPercentage"])+"%")
         if action == "Buy":
             e.add_field(name="Total Position", value=str(order["marketValue"] / acc_value * 100.0) + "%", inline=True)
         e.color = 0x50f276 if action == "Buy" else 0xFF0000
