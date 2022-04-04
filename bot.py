@@ -64,6 +64,7 @@ def parser(msg_data, msg_type):
     return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol
         
 def filter(msg):
+    global open_requests
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
     if msg_type == "SUBSCRIBED":
         return format(Embed(title="Trade Alert Bot Activated"))
