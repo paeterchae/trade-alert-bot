@@ -77,7 +77,7 @@ def filter(msg):
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol = parser(msg_data, msg_type)
         if bs == "Trim":
-            trim_percentage = str(num_contracts/curr_positions[symbol]["longQuantity"] * 100.0) + "%"
+            trim_percentage = str(int(num_contracts/curr_positions[symbol]["longQuantity"] * 100)) + "%"
             e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, strike, exp, cp))  
         else:
             e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
@@ -183,7 +183,7 @@ async def order_fill(order, action, acc_value, prev=None):
         exp = option[1][:6][:2] + "/" + option[1][:6][2:4] + "/" + option[1][:6][4:6]
         cp = "Call" if option[1][6] == "C" else "Put"
         if action == "Trim":
-            trim_percentage = str((1.0 - order["longQuantity"]/prev["longQuantity"]) * 100.0) + "%"
+            trim_percentage = str(int((1.0 - order["longQuantity"]/prev["longQuantity"]) * 100)) + "%"
             e = Embed(title="{} {} {} {} {} {}".format(action, trim_percentage, ticker, strike, exp, cp))
             e.add_field(name="Position Left", value=str(int(order["marketValue"] / acc_value * 100.0)) + "%", inline=True)
         else:
