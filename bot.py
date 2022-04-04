@@ -25,8 +25,20 @@ CHANNEL_ID = os.getenv('CHANNEL_ID')
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 
-#global variables
+#initializing global variables
 curr_positions = {}
+try:
+    active_positions = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS).json()["securitiesAccount"]["positions"]
+    for pos in active_positions:
+        symbol = pos["instrument"]["symbol"]
+        curr_positions[symbol] = pos
+except KeyError:
+    pass
+
+open_requests = len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.Status.AWAITING_CONDITION).json())
+open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.Status.QUEUED).json())
+open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.Status.PENDING_ACTIVATION).json())
+
 streaming = True
 
 def parser(msg_data, msg_type):
@@ -62,7 +74,7 @@ def filter(msg):
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol = parser(msg_data, msg_type)
         if bs == "Trim":
             trim_percentage = str(num_contracts/curr_positions[symbol]["longQuantity"] * 100.0) + "%"
-            e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, strike, exp, cp))
+            e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, strike, exp, cp))  
         else:
             e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
         e.add_field(name="Order Type", value=order_type, inline=True)
@@ -78,12 +90,21 @@ def filter(msg):
             if bs == "Buy":
                 e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * 10000.0 * num_contracts / float(acc_value))) + "%")
         if msg_type == "OrderEntryRequest":
+            open_requests += 1
+            if not update_positions.is_running():
+                update_positions.start()
             e.description = "Order Placed"
             return format(e)
         elif msg_type == "OrderCancelReplaceRequest":
+            open_requests += 1
+            if not update_positions.is_running():
+                update_positions.start()
             e.description = "Replacement Order Placed"
             return format(e)
         elif msg_type == "UROUT":
+            open_requests -= 1
+            if open_requests == 0 and update_positions.is_running():
+                update_positions.stop()
             return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
         else:
             return None
@@ -99,24 +120,21 @@ bot = commands.Bot(command_prefix='!')
 
 @bot.command(name="alert", help="Begins streaming from account")
 async def read_stream(ctx):
+    global streaming
+    streaming = False
+
     stream_client = StreamClient(client)
     await stream_client.login()
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
     
     async def send_response(msg):
-        if isinstance(filter(msg), Embed):
+        if filter(msg) != None:
             await ctx.send(embed=filter(msg))
-        elif filter(msg) != None:
-            try:
-                await ctx.send(filter(msg))
-            except:
-                with open("error.log", "a+") as file:
-                    file.write(filter(msg))
-                    print(filter(msg))
-                file.close()
 
     stream_client.add_account_activity_handler(send_response)
     await stream_client.account_activity_sub()
+
+    streaming = True
  
     while streaming:
         await stream_client.handle_message()
@@ -136,41 +154,14 @@ async def unsub(ctx):
 
     await ctx.send(embed=format(Embed(title="Trade Alert Bot Deactivated")))
 
-@bot.command(name="acc", help="acc")
+@bot.command(name="acc", help="Displays account information")
 async def acc(ctx):
     r = client.get_account(ACCOUNT_ID)
     await ctx.send(json.dumps(r.json(), indent=4))
-    slow_count.stop()
 
-@bot.command(name="pos", help="pos")
-async def pos(ctx):
-    r = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS)
-    try:
-        with open("position.log", "a+") as file:
-            file.write(json.dumps(r.json()["securitiesAccount"]["positions"], indent=4))
-        file.close()
-        await ctx.send(json.dumps(r.json()["securitiesAccount"]["positions"], indent=4))
-    except KeyError:
-        await ctx.send("No current positions")
-
-@bot.command(name="status", help="status")
+@bot.command(name="pos", help="Displays active positions")
 async def status(ctx):
     await ctx.send(curr_positions)
-    if not slow_count.is_running():
-        slow_count.start()
-    else:
-        print("process already started")
-
-@bot.event
-async def on_ready():
-    print(f'{bot.user.name} has connected to Discord!')
-    update_positions.start()
-
-@tasks.loop(seconds=1)
-async def slow_count():
-    print(slow_count.current_loop)
-    channel = bot.get_channel(int(CHANNEL_ID))
-    await channel.send(slow_count.current_loop)
 
 async def order_fill(order, action, acc_value, prev=None):
     if order["instrument"]["assetType"] == "OPTION":
@@ -192,6 +183,7 @@ async def order_fill(order, action, acc_value, prev=None):
         if action == "Buy":
             e.add_field(name="Total Position", value=str(order["marketValue"] / acc_value * 100.0) + "%", inline=True)
         e.color = 0x50f276 if action == "Buy" else 0xFF0000
+        e.description = "Order Filled"
         channel = bot.get_channel(int(CHANNEL_ID))
         await channel.send(embed=format(e))
 
@@ -230,5 +222,11 @@ async def update_positions():
                     await order_fill(tmp[symbol], acc_value, "Exit")
                 else:
                     await order_fill(tmp[symbol], acc_value, "Cut")
+
+@bot.event
+async def on_ready():
+    print(f'{bot.user.name} has connected to Discord!')
+    if open_requests > 0:
+        update_positions.start()
 
 bot.run(TOKEN)
