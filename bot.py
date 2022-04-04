@@ -17,7 +17,7 @@ logging.basicConfig(format="%(asctime)s %(levelname)s:%(name)s: %(message)s", da
 load_dotenv()
 
 #const 
-TOKEN_PATH = 'test_token.json'
+TOKEN_PATH = 'token.json'
 API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
 ACCOUNT_ID = os.getenv('ACCOUNT_ID')
@@ -178,9 +178,9 @@ async def order_fill(order, action, acc_value, prev=None):
             e.add_field(name="Position Left", value=str(order["marketValue"] / acc_value * 100.0) + "%", inline=True)
         else:
             e = Embed(title="{} {} {} {} {}".format(action, ticker, strike, exp, cp))
-        e.add_field(name="Average Cost", value=str(order["averagePrice"]))
-        e.add_field(name="Market Price", value=str(order["marketValue"]/order["longQuantity"]/100.0))
-        e.add_field(name="Profit/Loss", value=str(order["currentDayProfitLossPercentage"])+"%")
+        e.add_field(name="Average Cost", value=str(order["averagePrice"]), inline=True)
+        e.add_field(name="Market Price", value=str(order["marketValue"]/order["longQuantity"]/100.0), inline=True)
+        e.add_field(name="Profit/Loss", value=str(order["currentDayProfitLossPercentage"])+"%", inline=True)
         if action == "Buy":
             e.add_field(name="Total Position", value=str(order["marketValue"] / acc_value * 100.0) + "%", inline=True)
         e.color = 0x50f276 if action == "Buy" else 0xFF0000
@@ -226,8 +226,10 @@ async def update_positions():
 
 @bot.event
 async def on_ready():
+    channel = bot.get_channel(int(CHANNEL_ID))
     print(f'{bot.user.name} has connected to Discord!')
     if open_requests > 0:
         update_positions.start()
+    await channel.send("Let's get this bread!")
 
 bot.run(TOKEN)
