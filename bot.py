@@ -53,10 +53,13 @@ def parser(msg_data, msg_type):
     bs = order["OrderInstructions"]
     num_contracts = int(order["OriginalQuantity"])
     if bs == "Sell":
-        if curr_positions[symbol]["longQuantity"] - num_contracts > 0:
-            bs = "Trim"
-        else:
-            bs = "Exit" if curr_positions[symbol]["currentDayProfitLossPercentage"] > 0 else "Cut"
+        try:
+            if curr_positions[symbol]["longQuantity"] - num_contracts > 0:
+                bs = "Trim"
+            else:
+                bs = "Exit" if curr_positions[symbol]["currentDayProfitLossPercentage"] > 0 else "Cut"
+        except KeyError: #only occurs for faulty double message from streaming client
+            pass
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
     bid = "{:0.2f}".format(float(order["OrderPricing"]["Bid"]))
@@ -91,19 +94,20 @@ def filter(msg):
             if bs == "Buy":
                 e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * 10000.0 * num_contracts / float(acc_value))) + "%")
         if msg_type == "OrderEntryRequest":
-            open_requests += 1
+            #request addition is 0.5 b/c streaming client sends two messages to handler per request
+            open_requests += 0.5
             if not update_positions.is_running():
                 update_positions.start()
             e.description = "Order Placed"
             return format(e)
         elif msg_type == "OrderCancelReplaceRequest":
-            open_requests += 1
+            open_requests += 0.5
             if not update_positions.is_running():
                 update_positions.start()
             e.description = "Replacement Order Placed"
             return format(e)
         elif msg_type == "UROUT":
-            open_requests -= 1
+            open_requests -= 0.5
             if open_requests == 0 and update_positions.is_running():
                 update_positions.stop()
             return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
@@ -169,6 +173,8 @@ async def req(ctx):
     await ctx.send("Open Requests: " + str(open_requests))
 
 async def order_fill(order, action, acc_value, prev=None):
+    global open_requests
+    open_requests -= 1
     if order["instrument"]["assetType"] == "OPTION":
         symbol = order["instrument"]["symbol"]
         option = symbol.split("_")
@@ -179,14 +185,14 @@ async def order_fill(order, action, acc_value, prev=None):
         if action == "Trim":
             trim_percentage = str((1.0 - order["longQuantity"]/prev["longQuantity"]) * 100.0) + "%"
             e = Embed(title="{} {} {} {} {} {}".format(action, trim_percentage, ticker, strike, exp, cp))
-            e.add_field(name="Position Left", value=str(order["marketValue"] / acc_value * 100.0) + "%", inline=True)
+            e.add_field(name="Position Left", value=str(int(order["marketValue"] / acc_value * 100.0)) + "%", inline=True)
         else:
             e = Embed(title="{} {} {} {} {}".format(action, ticker, strike, exp, cp))
         e.add_field(name="Average Cost", value=str(order["averagePrice"]), inline=True)
         e.add_field(name="Market Price", value=str(order["marketValue"]/order["longQuantity"]/100.0), inline=True)
         e.add_field(name="Profit/Loss", value=str(order["currentDayProfitLossPercentage"])+"%", inline=True)
         if action == "Buy":
-            e.add_field(name="Total Position", value=str(order["marketValue"] / acc_value * 100.0) + "%", inline=True)
+            e.add_field(name="Total Position", value=str(int(order["marketValue"] / acc_value * 100.0)) + "%", inline=True)
         e.color = 0x50f276 if action == "Buy" else 0xFF0000
         e.description = "Order Filled"
         channel = bot.get_channel(int(CHANNEL_ID))
@@ -223,7 +229,7 @@ async def update_positions():
         if tmp != {}:
             curr_positions = {}
             for symbol in tmp.keys():
-                if pos["currentDayProfitLossPercentage"] > 0:
+                if tmp[symbol]["currentDayProfitLossPercentage"] > 0:
                     await order_fill(tmp[symbol], acc_value, "Exit")
                 else:
                     await order_fill(tmp[symbol], acc_value, "Cut")
