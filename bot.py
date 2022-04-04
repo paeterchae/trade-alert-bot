@@ -78,9 +78,9 @@ def filter(msg):
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol = parser(msg_data, msg_type)
         if bs == "Trim":
             trim_percentage = str(int(num_contracts/curr_positions[symbol]["longQuantity"] * 100)) + "%"
-            e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, strike, exp, cp))  
+            e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp))  
         else:
-            e = Embed(title="{} {} {} {} {}".format(bs, ticker, strike, exp, cp))
+            e = Embed(title="{} {} {} {} {}".format(bs, ticker, exp, strike, cp))
         e.add_field(name="Order Type", value=order_type, inline=True)
         e.color = 0xFFFF00
         #position size only visible if limit order
@@ -110,7 +110,7 @@ def filter(msg):
             open_requests -= 0.5
             if open_requests == 0 and update_positions.is_running():
                 update_positions.stop()
-            return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, strike, exp, cp), color=0xFF8B00))
+            return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, exp, strike, cp), color=0xFF8B00))
         else:
             return None
 
@@ -184,10 +184,10 @@ async def order_fill(order, action, acc_value, prev=None):
         cp = "Call" if option[1][6] == "C" else "Put"
         if action == "Trim":
             trim_percentage = str(int((1.0 - order["longQuantity"]/prev["longQuantity"]) * 100)) + "%"
-            e = Embed(title="{} {} {} {} {} {}".format(action, trim_percentage, ticker, strike, exp, cp))
+            e = Embed(title="{} {} {} {} {} {}".format(action, trim_percentage, ticker, exp, strike, cp))
             e.add_field(name="Position Left", value=str(int(order["marketValue"] / acc_value * 100.0)) + "%", inline=True)
         else:
-            e = Embed(title="{} {} {} {} {}".format(action, ticker, strike, exp, cp))
+            e = Embed(title="{} {} {} {} {}".format(action, ticker, exp, strike, cp))
         e.add_field(name="Average Cost", value=str(order["averagePrice"]), inline=True)
         e.add_field(name="Market Price", value=str(order["marketValue"]/order["longQuantity"]/100.0), inline=True)
         e.add_field(name="Profit/Loss", value=str(order["currentDayProfitLossPercentage"])+"%", inline=True)
