@@ -196,12 +196,12 @@ async def update_positions():
         account = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS).json()["securitiesAccount"]
         new_positions = account["positions"]
         acc_value = account["currentBalances"]["liquidationValue"]
-        tracked_positions = []
+        tracked_positions = set()
         #addition or update
         for pos in new_positions:
             symbol = pos["instrument"]["symbol"]
             amt = pos["longQuantity"]
-            tracked_positions.append(symbol)
+            tracked_positions.add(symbol)
             curr_positions[symbol] = pos
             if tmp.get(symbol) == None or amt > tmp[symbol]["longQuantity"]:
                 await order_fill(pos, "Buy", acc_value)
