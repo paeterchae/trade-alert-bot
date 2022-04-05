@@ -74,6 +74,11 @@ def filter(msg):
     elif msg_type == "TransactionTrade":
         return None
     else:
+        if msg_type == "OrderEntryRequest" or "OrderCancelReplaceRequest":
+            #request addition is 0.5 b/c streaming client sends two messages to handler per request
+            open_requests += 0.5
+            if not update_positions.is_running():
+                update_positions.start()
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol = parser(msg_data, msg_type)
         if bs == "Trim":
@@ -94,23 +99,19 @@ def filter(msg):
             if bs == "Buy":
                 e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * 10000.0 * num_contracts / float(acc_value))) + "%")
         if msg_type == "OrderEntryRequest":
-            #request addition is 0.5 b/c streaming client sends two messages to handler per request
-            open_requests += 0.5
-            if not update_positions.is_running():
-                update_positions.start()
             e.description = "Order Placed"
             return format(e)
         elif msg_type == "OrderCancelReplaceRequest":
-            open_requests += 0.5
-            if not update_positions.is_running():
-                update_positions.start()
             e.description = "Replacement Order Placed"
             return format(e)
         elif msg_type == "UROUT":
             open_requests -= 0.5
             if open_requests == 0 and update_positions.is_running():
                 update_positions.stop()
-            return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, exp, strike, cp), color=0xFF8B00))
+            if bs == "Trim":
+                return format(Embed(title="Order Cancelled", description = "{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp), color=0xFF8B00))
+            else:
+                return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, exp, strike, cp), color=0xFF8B00))
         else:
             return None
 
@@ -204,10 +205,10 @@ async def order_fill(order, action, acc_value, prev=None):
 async def update_positions():
     global curr_positions
     tmp = copy.deepcopy(curr_positions)
+    account = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS).json()["securitiesAccount"]
+    acc_value = account["currentBalances"]["liquidationValue"]
     try:
-        account = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS).json()["securitiesAccount"]
         new_positions = account["positions"]
-        acc_value = account["currentBalances"]["liquidationValue"]
         tracked_positions = set()
         #addition or update
         for pos in new_positions:
