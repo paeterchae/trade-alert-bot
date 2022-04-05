@@ -247,6 +247,6 @@ async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
     if open_requests > 0:
         update_positions.start()
-    await channel.send(f'{bot.user.name} has connected to Discord!')
+    await read_stream(channel)
 
 bot.run(TOKEN)
