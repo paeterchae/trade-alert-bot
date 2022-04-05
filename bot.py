@@ -224,17 +224,17 @@ async def update_positions():
             if symbol not in tracked_positions:
                 del curr_positions[symbol]
                 if tmp[symbol]["currentDayProfitLossPercentage"] > 0:
-                    await order_fill(tmp[symbol], acc_value, "Exit")
+                    await order_fill(tmp[symbol], "Exit", acc_value)
                 else:
-                    await order_fill(tmp[symbol], acc_value, "Cut")
+                    await order_fill(tmp[symbol], "Cut", acc_value)
     except KeyError:
         if tmp != {}:
             curr_positions = {}
             for symbol in tmp.keys():
                 if tmp[symbol]["currentDayProfitLossPercentage"] > 0:
-                    await order_fill(tmp[symbol], acc_value, "Exit")
+                    await order_fill(tmp[symbol], "Exit", acc_value)
                 else:
-                    await order_fill(tmp[symbol], acc_value, "Cut")
+                    await order_fill(tmp[symbol], "Cut", acc_value)
 
 @update_positions.after_loop
 async def stop_looping():
@@ -246,6 +246,6 @@ async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
     if open_requests > 0:
         update_positions.start()
-    await channel.send("Let's get this bread!")
+    await channel.send(f'{bot.user.name} has connected to Discord!')
 
 bot.run(TOKEN)
