@@ -175,6 +175,8 @@ async def req(ctx):
 async def order_fill(order, action, acc_value, prev=None):
     global open_requests
     open_requests -= 1
+    if open_requests == 0 and update_positions.is_running():
+        update_positions.stop()
     if order["instrument"]["assetType"] == "OPTION":
         symbol = order["instrument"]["symbol"]
         option = symbol.split("_")
@@ -233,6 +235,10 @@ async def update_positions():
                     await order_fill(tmp[symbol], acc_value, "Exit")
                 else:
                     await order_fill(tmp[symbol], acc_value, "Cut")
+
+@update_positions.after_loop
+async def stop_looping():
+    print("No open requests, background position update stopped")
 
 @bot.event
 async def on_ready():
