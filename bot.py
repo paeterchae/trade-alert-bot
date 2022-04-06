@@ -134,8 +134,11 @@ async def read_stream(ctx):
     await stream_client.quality_of_service(StreamClient.QOSLevel.EXPRESS)
     
     async def send_response(msg):
-        if filter(msg) != None:
-            await ctx.send(embed=filter(msg))
+        filtered = filter(msg)
+        if filtered != None:
+            await ctx.send(embed=filtered)
+            if filtered.color==0xFFFF00:
+                await ctx.send("@here")
 
     stream_client.add_account_activity_handler(send_response)
     await stream_client.account_activity_sub()
