@@ -77,6 +77,9 @@ def filter(msg):
         if msg_type == "OrderEntryRequest" or "OrderCancelReplaceRequest":
             #request addition is 0.5 b/c streaming client sends two messages to handler per request
             open_requests += 0.5
+            with open("request.log", "a+") as file:
+                file.write(msg_type + "\n")
+            file.close()
             if not update_positions.is_running():
                 update_positions.start()
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
@@ -106,6 +109,9 @@ def filter(msg):
             return format(e)
         elif msg_type == "UROUT":
             open_requests -= 0.5
+            with open("request.log", "a+") as file:
+                file.write(msg_type + "\n")
+            file.close()
             if open_requests == 0 and update_positions.is_running():
                 update_positions.stop()
             if bs == "Trim":
@@ -179,6 +185,9 @@ async def req(ctx):
 async def order_fill(order, action, acc_value, prev=None):
     global open_requests
     open_requests -= 1
+    with open("request.log", "a+") as file:
+        file.write("Order Fill\n")
+    file.close()
     if open_requests == 0 and update_positions.is_running():
         update_positions.stop()
     if order["instrument"]["assetType"] == "OPTION":
