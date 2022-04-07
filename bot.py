@@ -40,6 +40,8 @@ open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.St
 open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.Status.PENDING_ACTIVATION).json())
 
 streaming = True
+trimmed = set()
+replaced = {}
 
 def parser(msg_data, msg_type):
     order = msg_data[msg_type + "Message"]["Order"]
@@ -67,7 +69,7 @@ def parser(msg_data, msg_type):
     return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol
         
 def filter(msg):
-    global open_requests
+    global open_requests, trimmed, replaced
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
     if msg_type == "SUBSCRIBED":
         return format(Embed(title="Trade Alert Bot Activated"))
@@ -86,7 +88,8 @@ def filter(msg):
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol = parser(msg_data, msg_type)
         if bs == "Trim":
             trim_percentage = str(int(num_contracts/curr_positions[symbol]["longQuantity"] * 100)) + "%"
-            e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp))  
+            e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp))
+            trimmed.add(symbol)
         else:
             e = Embed(title="{} {} {} {} {}".format(bs, ticker, exp, strike, cp))
         e.add_field(name="Order Type", value=order_type, inline=True)
@@ -106,6 +109,7 @@ def filter(msg):
             return format(e)
         elif msg_type == "OrderCancelReplaceRequest":
             e.description = "Replacement Order Placed"
+            replaced[symbol] = replaced.get(symbol, 0) + 0.5
             return format(e)
         elif msg_type == "UROUT":
             open_requests -= 0.5
@@ -115,6 +119,12 @@ def filter(msg):
             if open_requests == 0 and update_positions.is_running():
                 update_positions.stop()
             if bs == "Trim":
+                if replaced.get(symbol) != None:
+                    replaced[symbol] -= 0.5
+                    if replaced[symbol] == 0.0:
+                        del replaced[symbol]
+                else:
+                    trimmed.remove(symbol)
                 return format(Embed(title="Order Cancelled", description = "{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp), color=0xFF8B00))
             else:
                 return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, exp, strike, cp), color=0xFF8B00))
@@ -215,7 +225,7 @@ async def order_fill(order, action, acc_value, prev=None):
 
 @tasks.loop(seconds=1)
 async def update_positions():
-    global curr_positions
+    global curr_positions, trimmed
     tmp = copy.deepcopy(curr_positions)
     account = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS).json()["securitiesAccount"]
     acc_value = account["currentBalances"]["liquidationValue"]
@@ -231,10 +241,11 @@ async def update_positions():
             if tmp.get(symbol) == None or amt > tmp[symbol]["longQuantity"]:
                 await order_fill(pos, "Buy", acc_value)
             elif amt < tmp[symbol]["longQuantity"]:
+                trimmed.remove(symbol)
                 await order_fill(pos, "Trim", acc_value, tmp)
         #removal
         for symbol in tmp.keys():
-            if symbol not in tracked_positions:
+            if symbol not in tracked_positions and symbol not in trimmed:
                 del curr_positions[symbol]
                 if tmp[symbol]["currentDayProfitLossPercentage"] > 0:
                     await order_fill(tmp[symbol], "Exit", acc_value)
@@ -242,12 +253,13 @@ async def update_positions():
                     await order_fill(tmp[symbol], "Cut", acc_value)
     except KeyError:
         if tmp != {}:
-            curr_positions = {}
             for symbol in tmp.keys():
-                if tmp[symbol]["currentDayProfitLossPercentage"] > 0:
-                    await order_fill(tmp[symbol], "Exit", acc_value)
-                else:
-                    await order_fill(tmp[symbol], "Cut", acc_value)
+                if symbol not in trimmed:
+                    del curr_positions[symbol]
+                    if tmp[symbol]["currentDayProfitLossPercentage"] > 0:
+                        await order_fill(tmp[symbol], "Exit", acc_value)
+                    else:
+                        await order_fill(tmp[symbol], "Cut", acc_value)
 
 @update_positions.after_loop
 async def stop_looping():
