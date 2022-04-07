@@ -71,12 +71,11 @@ def parser(msg_data, msg_type):
 def filter(msg):
     global open_requests, trimmed, replaced
     msg_type = msg["content"][0]["MESSAGE_TYPE"]
+
     if msg_type == "SUBSCRIBED":
         return format(Embed(title="Trade Alert Bot Activated"))
-    elif msg_type == "TransactionTrade":
-        return None
-    else:
-        if msg_type == "OrderEntryRequest" or "OrderCancelReplaceRequest":
+    elif msg_type in {"OrderEntryRequest","OrderCancelReplaceRequest", "UROUT"}:
+        if msg_type in {"OrderEntryRequest","OrderCancelReplaceRequest"}:
             #request addition is 0.5 b/c streaming client sends two messages to handler per request
             open_requests += 0.5
             with open("request.log", "a+") as file:
@@ -84,17 +83,23 @@ def filter(msg):
             file.close()
             if not update_positions.is_running():
                 update_positions.start()
+
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol = parser(msg_data, msg_type)
+
         if bs == "Trim":
             trim_percentage = str(int(num_contracts/curr_positions[symbol]["longQuantity"] * 100)) + "%"
             e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp))
-            trimmed.add(symbol)
+            if msg_type != "UROUT":
+                trimmed.add(symbol)
+                if msg_type == "OrderCancelReplaceRequest":
+                    replaced[symbol] = replaced.get(symbol, 0) + 0.5
         else:
             e = Embed(title="{} {} {} {} {}".format(bs, ticker, exp, strike, cp))
+
         e.add_field(name="Order Type", value=order_type, inline=True)
         e.color = 0xFFFF00
-        #position size only visible if limit order
+
         if order_type == "Limit":
             e.add_field(name="Limit Price", value=limit_price, inline=True)
             if bs == "Buy":
@@ -104,14 +109,8 @@ def filter(msg):
             e.add_field(name="Ask", value=ask, inline=True)
             if bs == "Buy":
                 e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * 10000.0 * num_contracts / float(acc_value))) + "%")
-        if msg_type == "OrderEntryRequest":
-            e.description = "Order Placed"
-            return format(e)
-        elif msg_type == "OrderCancelReplaceRequest":
-            e.description = "Replacement Order Placed"
-            replaced[symbol] = replaced.get(symbol, 0) + 0.5
-            return format(e)
-        elif msg_type == "UROUT":
+
+        if msg_type == "UROUT":
             open_requests -= 0.5
             with open("request.log", "a+") as file:
                 file.write(msg_type + "\n")
@@ -124,12 +123,20 @@ def filter(msg):
                     if replaced[symbol] == 0.0:
                         del replaced[symbol]
                 else:
-                    trimmed.remove(symbol)
+                    try:
+                        trimmed.remove(symbol)
+                    except KeyError: #faulty double message from tda api
+                        pass
                 return format(Embed(title="Order Cancelled", description = "{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp), color=0xFF8B00))
             else:
                 return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, exp, strike, cp), color=0xFF8B00))
-        else:
-            return None
+        elif msg_type == "OrderEntryRequest":
+            e.description = "Order Placed"
+        elif msg_type == "OrderCancelReplaceRequest":
+            e.description = "Replacement Order Placed"
+        return format(e)
+    else:
+        return None
 
 def format(e=Embed):
     e.set_author(name="Highstrike", url="https://highstrike.com/",
@@ -187,6 +194,14 @@ async def acc(ctx):
 @bot.command(name="pos", help="Displays active positions")
 async def pos(ctx):
     await ctx.send(curr_positions)
+
+@bot.command(name="trim", help="Displays trim order requests")
+async def trim(ctx):
+    await ctx.send(trimmed)
+
+@bot.command(name="rep", help="Displays replace trim order requests")
+async def replace(ctx):
+    await ctx.send(replaced)
 
 @bot.command(name="req", help="Displays open request count")
 async def req(ctx):
