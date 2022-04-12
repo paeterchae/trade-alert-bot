@@ -205,9 +205,6 @@ async def order_fill(order, action, acc_value, prev=None):
     open_requests -= 1
     if open_requests == 0 and update_positions.is_running():
         update_positions.stop()
-        #remove in final product
-        channel = bot.get_channel(int(CHANNEL_ID))
-        await channel.send("Background position update stopped")
     if order["instrument"]["assetType"] == "OPTION":
         symbol = order["instrument"]["symbol"]
         option = symbol.split("_")
