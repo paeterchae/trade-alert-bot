@@ -22,6 +22,7 @@ API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
 ACCOUNT_ID = os.getenv('ACCOUNT_ID')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
+USER_ID = os.getenv('USER_ID')
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 
@@ -132,8 +133,7 @@ def filter(msg):
         return None
 
 def format(e):
-    e.set_author(name="Highstrike", url="https://highstrike.com/",
-                icon_url="https://www.highstriketrading.com/hosted/images/78/b23e71dc0b420c80120008ffeb837d/Circle-Logo.png")
+    e.set_author(name=user.name, icon_url=user.avatar_url)
     e.set_thumbnail(url="https://www.highstriketrading.com/hosted/images/78/b23e71dc0b420c80120008ffeb837d/Circle-Logo.png")
     e.set_footer(text="Highstrike Signals")
     return e
@@ -271,7 +271,9 @@ async def update_positions():
 
 @bot.event
 async def on_ready():
+    global user
     channel = bot.get_channel(int(CHANNEL_ID))
+    user = await bot.fetch_user(int(USER_ID))
     print(f'{bot.user.name} has connected to Discord!')
     if open_requests > 0:
         update_positions.start()
