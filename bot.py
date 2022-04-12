@@ -41,7 +41,7 @@ open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.St
 
 streaming = True
 trimmed = set()
-replaced = {}
+replaced = set()
 
 def parser(msg_data, msg_type):
     order = msg_data[msg_type + "Message"]["Order"]
@@ -55,13 +55,10 @@ def parser(msg_data, msg_type):
     bs = order["OrderInstructions"]
     num_contracts = int(order["OriginalQuantity"])
     if bs == "Sell":
-        try:
-            if curr_positions[symbol]["longQuantity"] - num_contracts > 0:
-                bs = "Trim"
-            else:
-                bs = "Exit" if curr_positions[symbol]["currentDayProfitLossPercentage"] > 0 else "Cut"
-        except KeyError: #only occurs for faulty double message from streaming client
-            pass
+        if curr_positions[symbol]["longQuantity"] - num_contracts > 0:
+            bs = "Trim"
+        else:
+            bs = "Exit" if curr_positions[symbol]["currentDayProfitLossPercentage"] > 0 else "Cut"
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
     bid = "{:0.2f}".format(float(order["OrderPricing"]["Bid"]))
@@ -76,11 +73,7 @@ def filter(msg):
         return format(Embed(title="Trade Alert Bot Activated"))
     elif msg_type in {"OrderEntryRequest","OrderCancelReplaceRequest", "UROUT"}:
         if msg_type in {"OrderEntryRequest","OrderCancelReplaceRequest"}:
-            #request addition is 0.5 b/c streaming client sends two messages to handler per request
-            open_requests += 0.5
-            with open("request.log", "a+") as file:
-                file.write(msg_type + "\n")
-            file.close()
+            open_requests += 1
             if not update_positions.is_running():
                 update_positions.start()
 
@@ -92,8 +85,11 @@ def filter(msg):
             e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp))
             if msg_type != "UROUT":
                 trimmed.add(symbol)
+                print(trimmed)
                 if msg_type == "OrderCancelReplaceRequest":
-                    replaced[symbol] = replaced.get(symbol, 0) + 0.5
+                    replaced.add(symbol)
+            else:
+                print("Not added to trim: " + str(symbol))
         else:
             e = Embed(title="{} {} {} {} {}".format(bs, ticker, exp, strike, cp))
 
@@ -111,22 +107,14 @@ def filter(msg):
                 e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * 10000.0 * num_contracts / float(acc_value))) + "%")
 
         if msg_type == "UROUT":
-            open_requests -= 0.5
-            with open("request.log", "a+") as file:
-                file.write(msg_type + "\n")
-            file.close()
+            open_requests -= 1
             if open_requests == 0 and update_positions.is_running():
                 update_positions.stop()
             if bs == "Trim":
-                if replaced.get(symbol) != None:
-                    replaced[symbol] -= 0.5
-                    if replaced[symbol] == 0.0:
-                        del replaced[symbol]
+                if symbol in replaced:
+                    replaced.remove(symbol)
                 else:
-                    try:
-                        trimmed.remove(symbol)
-                    except KeyError: #faulty double message from tda api
-                        pass
+                    trimmed.remove(symbol)
                 return format(Embed(title="Order Cancelled", description = "{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp), color=0xFF8B00))
             else:
                 return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, exp, strike, cp), color=0xFF8B00))
@@ -138,7 +126,7 @@ def filter(msg):
     else:
         return None
 
-def format(e=Embed):
+def format(e):
     e.set_author(name="Highstrike", url="https://highstrike.com/",
                 icon_url="https://www.highstriketrading.com/hosted/images/78/b23e71dc0b420c80120008ffeb837d/Circle-Logo.png")
     e.set_thumbnail(url="https://www.highstriketrading.com/hosted/images/78/b23e71dc0b420c80120008ffeb837d/Circle-Logo.png")
@@ -160,7 +148,7 @@ async def read_stream(ctx):
         filtered = filter(msg)
         if filtered != None:
             await ctx.send(embed=filtered)
-            if filtered.color==0xFFFF00:
+            if str(filtered.color) == "#ffff00":
                 await ctx.send("@here")
 
     stream_client.add_account_activity_handler(send_response)
@@ -210,11 +198,11 @@ async def req(ctx):
 async def order_fill(order, action, acc_value, prev=None):
     global open_requests
     open_requests -= 1
-    with open("request.log", "a+") as file:
-        file.write("Order Fill\n")
-    file.close()
     if open_requests == 0 and update_positions.is_running():
         update_positions.stop()
+        #remove in final product
+        channel = bot.get_channel(int(CHANNEL_ID))
+        await channel.send("Background position update stopped")
     if order["instrument"]["assetType"] == "OPTION":
         symbol = order["instrument"]["symbol"]
         option = symbol.split("_")
@@ -259,7 +247,7 @@ async def update_positions():
                 trimmed.remove(symbol)
                 await order_fill(pos, "Trim", acc_value, tmp)
         #removal
-        for symbol in tmp.keys():
+        for symbol in tmp:
             if symbol not in tracked_positions and symbol not in trimmed:
                 del curr_positions[symbol]
                 if tmp[symbol]["currentDayProfitLossPercentage"] > 0:
@@ -268,17 +256,13 @@ async def update_positions():
                     await order_fill(tmp[symbol], "Cut", acc_value)
     except KeyError:
         if tmp != {}:
-            for symbol in tmp.keys():
+            for symbol in tmp:
                 if symbol not in trimmed:
                     del curr_positions[symbol]
                     if tmp[symbol]["currentDayProfitLossPercentage"] > 0:
                         await order_fill(tmp[symbol], "Exit", acc_value)
                     else:
                         await order_fill(tmp[symbol], "Cut", acc_value)
-
-@update_positions.after_loop
-async def stop_looping():
-    print("No open requests, background position update stopped")
 
 @bot.event
 async def on_ready():
