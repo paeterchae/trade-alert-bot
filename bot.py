@@ -152,9 +152,9 @@ async def read_stream(ctx):
     async def send_response(msg):
         filtered = filter(msg)
         if filtered != None:
-            await ctx.send(embed=filtered)
             if str(filtered.color) == "#ffff00":
                 await ctx.send("@here")
+            await ctx.send(embed=filtered)
 
     stream_client.add_account_activity_handler(send_response)
     await stream_client.account_activity_sub()
