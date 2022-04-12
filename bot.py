@@ -55,10 +55,17 @@ def parser(msg_data, msg_type):
     bs = order["OrderInstructions"]
     num_contracts = int(order["OriginalQuantity"])
     if bs == "Sell":
-        if curr_positions[symbol]["longQuantity"] - num_contracts > 0:
-            bs = "Trim"
-        else:
-            bs = "Exit" if curr_positions[symbol]["currentDayProfitLossPercentage"] > 0 else "Cut"
+        try:
+            if curr_positions[symbol]["longQuantity"] - num_contracts > 0:
+                bs = "Trim"
+            else:
+                bs = "Exit" if curr_positions[symbol]["currentDayProfitLossPercentage"] > 0 else "Cut"
+        except KeyError as e:
+            with open ("error.log", "a+") as file:
+                file.write(str(e))
+            file.close()
+            #remove final product
+            print(e)
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
     bid = "{:0.2f}".format(float(order["OrderPricing"]["Bid"]))
@@ -88,8 +95,6 @@ def filter(msg):
                 print(trimmed)
                 if msg_type == "OrderCancelReplaceRequest":
                     replaced.add(symbol)
-            else:
-                print("Not added to trim: " + str(symbol))
         else:
             e = Embed(title="{} {} {} {} {}".format(bs, ticker, exp, strike, cp))
 
@@ -244,8 +249,8 @@ async def update_positions():
             if tmp.get(symbol) == None or amt > tmp[symbol]["longQuantity"]:
                 await order_fill(pos, "Buy", acc_value)
             elif amt < tmp[symbol]["longQuantity"]:
-                trimmed.remove(symbol)
                 await order_fill(pos, "Trim", acc_value, tmp)
+                trimmed.remove(symbol)
         #removal
         for symbol in tmp:
             if symbol not in tracked_positions and symbol not in trimmed:
