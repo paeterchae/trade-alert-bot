@@ -189,6 +189,14 @@ async def fill(ctx):
 async def req(ctx):
     await ctx.send("Open Requests: " + str(open_requests))
 
+@bot.command(name="ord")
+async def ord(ctx):
+    account = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.ORDERS).json()["securitiesAccount"]
+    orders = account["orderStrategies"]
+    with open("order.log", "w") as f:
+        f.write(json.dumps(orders,indent=4))
+    f.close()
+
 async def order_fill(symbol, action, quantity, fill_price, acc_value):
     global open_requests
     open_requests -= 1
@@ -233,20 +241,21 @@ async def update_positions():
                     inst = leg["instruction"]
                     symbol = leg["instrument"]["symbol"]
                     for exec in order["orderActivityCollection"]:
-                        if exec["executionLegs"]["legId"] == leg["legId"]:
-                            partial_amt = exec["executionLegs"]["quantity"]
-                            price = exec["executionLegs"]["price"]
-                            if inst == "BUY_TO_OPEN":
-                                updated[symbol] = "Buy"
-                                if curr_positions.get(symbol) == None:
-                                    curr_positions[symbol] = {"quantity": partial_amt, "total_cost": price, "sell_price": 0}
-                                else:
-                                    curr_positions[symbol]["quantity"] += partial_amt
-                                    curr_positions[symbol]["total_cost"] += price
-                            elif inst == "SELL_TO_CLOSE":
-                                updated[symbol] = "Sell"
-                                curr_positions[symbol]["quantity"] -= partial_amt
-                                curr_positions[symbol]["sell_price"] += price
+                        for exec_leg in exec["executionLegs"]:
+                            if exec_leg["legId"] == leg["legId"]:
+                                partial_amt = exec_leg["quantity"]
+                                price = exec_leg["price"]
+                                if inst == "BUY_TO_OPEN":
+                                    updated[symbol] = "Buy"
+                                    if curr_positions.get(symbol) == None:
+                                        curr_positions[symbol] = {"quantity": partial_amt, "total_cost": price, "sell_price": 0}
+                                    else:
+                                        curr_positions[symbol]["quantity"] += partial_amt
+                                        curr_positions[symbol]["total_cost"] += price
+                                elif inst == "SELL_TO_CLOSE":
+                                    updated[symbol] = "Sell"
+                                    curr_positions[symbol]["quantity"] -= partial_amt
+                                    curr_positions[symbol]["sell_price"] += price
         for symbol in updated:
             if updated[symbol] == "Buy":
                 quantity = curr_positions[symbol]["quantity"] - prev[symbol]["quantity"]
@@ -259,7 +268,7 @@ async def update_positions():
                 curr_positions[symbol]["total_cost"] = curr_positions[symbol]["total_cost"] / prev[symbol]["quantity"] * curr_positions[symbol]["quantity"]
                 await order_fill(symbol, "Sell", quantity, fill_price, acc_value)
                 if curr_positions[symbol]["quantity"] == 0:
-                    del curr_positions[symbol]                      
+                    del curr_positions[symbol]                    
     except KeyError:
         pass
 
