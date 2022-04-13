@@ -94,10 +94,15 @@ def filter(msg):
         e.add_field(name="Order Type", value=order_type, inline=True)
         e.color = 0xFFFF00
 
-        if order_type == "Limit":
+        if order_type == "Limit" or order_type == "Stop Limit":
             e.add_field(name="Limit Price", value=limit_price, inline=True)
             if bs == "Buy":
                 e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * num_contracts / float(acc_value))) + "%")
+        elif order_type == "Stop":
+            try:
+                e.add_field(name="Limit Price", value=str(msg_data[msg_type + "Message"]["Order"]["OrderPricing"]["Stop"]), inline=True)
+            except KeyError:
+                pass
         elif order_type == "Market":
             e.add_field(name="Bid", value= bid, inline=True)
             e.add_field(name="Ask", value=ask, inline=True)
