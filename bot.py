@@ -182,7 +182,7 @@ async def pos(ctx):
     await ctx.send(curr_positions)
 
 @bot.command(name="filled", help="Displays past fills")
-async def filled(ctx):
+async def fill(ctx):
     await ctx.send(filled)
 
 @bot.command(name="req", help="Displays open request count")
