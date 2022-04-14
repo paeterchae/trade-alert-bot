@@ -145,12 +145,10 @@ async def read_stream(ctx):
     async def send_response(msg):
         filtered = filter(msg)
         if filtered != None:
-            if str(filtered.color) == "#ffff00":
-                for id in CHANNEL_IDS:
-                    channel = bot.get_channel(int(id))
-                    await channel.send("@here")
             for id in CHANNEL_IDS:
                 channel = bot.get_channel(int(id))
+                if str(filtered.color) == "#ffff00":
+                    await channel.send("@here")
                 await channel.send(embed=filtered)
 
     stream_client.add_account_activity_handler(send_response)
