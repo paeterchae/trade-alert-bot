@@ -65,9 +65,9 @@ def parser(msg_data, msg_type):
         else:
             avg_cost = curr_positions[symbol]["total_cost"] / curr_positions[symbol]["quantity"]
             try:
-                bs = "Exit" if avg_cost < limit_price else "Cut"
+                bs = "Exit" if avg_cost < float(limit_price) else "Cut"
             except TypeError: #market order
-                bs = "Exit" if avg_cost < bid else "Cut"
+                bs = "Exit" if avg_cost < float(bid) else "Cut"
     return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol
         
 def filter(msg):
@@ -211,7 +211,10 @@ async def order_fill(symbol, action, quantity, fill_price, acc_value):
     strike = option[1][7:]
     exp = option[1][:6][:2] + "/" + option[1][:6][2:4] + "/" + option[1][:6][4:6]
     cp = "Call" if option[1][6] == "C" else "Put"
-    avg_cost = curr_positions[symbol]["total_cost"] / curr_positions[symbol]["quantity"]
+    try:
+        avg_cost = curr_positions[symbol]["total_cost"] / curr_positions[symbol]["quantity"]
+    except ZeroDivisionError:
+        avg_cost = curr_positions[symbol]["total_cost"]
     if action == "Sell" and curr_positions[symbol]["quantity"] > 0:
             trim_percentage = str(int(quantity / (curr_positions[symbol]["quantity"] + quantity) * 100)) + "%"
             e = Embed(title="Trim {} {} {} {} {}".format(trim_percentage, ticker, exp, strike, cp))
@@ -270,10 +273,13 @@ async def update_positions():
                 quantity = prev[symbol]["quantity"] - curr_positions[symbol]["quantity"]
                 fill_price = curr_positions[symbol]["sell_price"] / quantity
                 curr_positions[symbol]["sell_price"] = 0
-                curr_positions[symbol]["total_cost"] = curr_positions[symbol]["total_cost"] / prev[symbol]["quantity"] * curr_positions[symbol]["quantity"]
+                if curr_positions[symbol]["quantity"] > 0:
+                    curr_positions[symbol]["total_cost"] = curr_positions[symbol]["total_cost"] / prev[symbol]["quantity"] * curr_positions[symbol]["quantity"]
+                else:
+                    curr_positions[symbol]["total_cost"] = curr_positions[symbol]["total_cost"] / prev[symbol]["quantity"]
                 await order_fill(symbol, "Sell", quantity, fill_price, acc_value)
                 if curr_positions[symbol]["quantity"] == 0:
-                    del curr_positions[symbol]                    
+                    del curr_positions[symbol]
     except KeyError:
         pass
 
