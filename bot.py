@@ -22,7 +22,7 @@ TOKEN_PATH = 'token.json'
 API_KEY = os.getenv('API_KEY')
 TOKEN = os.getenv('DISCORD_TOKEN')
 ACCOUNT_ID = os.getenv('ACCOUNT_ID')
-CHANNEL_ID = os.getenv('CHANNEL_ID')
+CHANNEL_IDS = os.getenv('CHANNEL_IDS').split(",")
 USER_ID = os.getenv('USER_ID')
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
@@ -146,8 +146,12 @@ async def read_stream(ctx):
         filtered = filter(msg)
         if filtered != None:
             if str(filtered.color) == "#ffff00":
-                await ctx.send("@here")
-            await ctx.send(embed=filtered)
+                for id in CHANNEL_IDS:
+                    channel = bot.get_channel(int(id))
+                    await channel.send("@here")
+            for id in CHANNEL_IDS:
+                channel = bot.get_channel(int(id))
+                await channel.send(embed=filtered)
 
     stream_client.add_account_activity_handler(send_response)
     await stream_client.account_activity_sub()
@@ -170,7 +174,9 @@ async def unsub(ctx):
 
     streaming = True
 
-    await ctx.send(embed=format(Embed(title="Trade Alert Bot Deactivated")))
+    for id in CHANNEL_IDS:
+        channel = bot.get_channel(int(id))
+        await channel.send(embed=format(Embed(title="Trade Alert Bot Deactivated")))
 
 @bot.command(name="acc", help="Displays account information")
 async def acc(ctx):
@@ -222,8 +228,9 @@ async def order_fill(symbol, action, quantity, fill_price, acc_value):
         e.add_field(name="Profit/Loss", value=str(int((fill_price-avg_cost) / avg_cost * 100))+"%", inline=True)
     e.color = 0x50f276 if action == "Buy" else 0xFF0000
     e.description = "Order Filled"
-    channel = bot.get_channel(int(CHANNEL_ID))
-    await channel.send(embed=format(e))
+    for id in CHANNEL_IDS:
+        channel = bot.get_channel(int(id))
+        await channel.send(embed=format(e))
 
 @tasks.loop(seconds=1)
 async def update_positions():
@@ -281,7 +288,7 @@ async def empty_filled():
 @bot.event
 async def on_ready():
     global user
-    channel = bot.get_channel(int(CHANNEL_ID))
+    channel = bot.get_channel(int(CHANNEL_IDS[0]))
     user = await bot.fetch_user(int(USER_ID))
     print(f'{bot.user.name} has connected to Discord!')
     empty_filled.start()
