@@ -195,11 +195,14 @@ async def req(ctx):
 
 @bot.command(name="ord")
 async def ord(ctx):
-    account = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.ORDERS).json()["securitiesAccount"]
-    orders = account["orderStrategies"]
-    with open("order.log", "w") as f:
-        f.write(json.dumps(orders,indent=4))
-    f.close()
+    try:
+        account = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.ORDERS).json()["securitiesAccount"]
+        orders = account["orderStrategies"]
+        with open("order.log", "w") as f:
+            f.write(json.dumps(orders,indent=4))
+        f.close()
+    except KeyError:
+        ctx.send("No orders made today")
 
 async def order_fill(symbol, action, quantity, fill_price, acc_value):
     global open_requests
@@ -268,6 +271,10 @@ async def update_positions():
             if updated[symbol] == "Buy":
                 quantity = curr_positions[symbol]["quantity"] - prev[symbol]["quantity"]
                 fill_price = (curr_positions[symbol]["total_cost"] - prev[symbol]["total_cost"]) / quantity
+                for id in CHANNEL_IDS:
+                    channel = bot.get_channel(int(id))
+                    await channel.send(curr_positions)
+                    await channel.send(f"Buy {symbol} {quantity} {fill_price}")
                 await order_fill(symbol, "Buy", quantity, fill_price, acc_value)
             else:
                 quantity = prev[symbol]["quantity"] - curr_positions[symbol]["quantity"]
