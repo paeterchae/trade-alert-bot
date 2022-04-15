@@ -91,8 +91,8 @@ def filter(msg):
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
         order = msg_data[msg_type + "Message"]["Order"]
         bs, order_type, acc_value, quantity, limit_price, bid, ask, symbol = parser(order)
-        sec_cat = order["Security"]["SecurityCategory"]
-        multiplier = 10000 if sec_cat == "Option" else 100
+        sec_cat = order["Security"]["SecurityType"]
+        multiplier = 10000 if "Option" in sec_cat else 100
         if bs == "Trim":
             trim_percentage = str(int(quantity/curr_positions[symbol]["quantity"] * 100)) + "%"
 
@@ -105,7 +105,7 @@ def filter(msg):
             if not update_positions.is_running():
                 update_positions.start()
             
-        if sec_cat == "Option":
+        if "Option" in sec_cat:
             ticker, strike, exp, cp = option_parser(symbol)
             e = Embed(title=f"{bs} {trim_percentage} {ticker} {exp} {strike} {cp}") if bs == "Trim" else Embed(title=f"{bs} {ticker} {exp} {strike} {cp}")
             if msg_type == "UROUT":
@@ -114,7 +114,7 @@ def filter(msg):
                 else:
                     return format(Embed(title="Order Cancelled", description = f"{bs} {ticker} {exp} {strike} {cp}", color=0xFF8B00))
 
-        elif sec_cat == "Equity":
+        elif "Stock" in sec_cat:
             e = Embed(title=f"{bs} {trim_percentage} {symbol}") if bs == "Trim" else Embed(title=f"{bs} {symbol}")
             if msg_type == "UROUT":
                 if bs == "Trim":
