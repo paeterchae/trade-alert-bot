@@ -46,7 +46,15 @@ open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.St
 open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.Status.PENDING_ACTIVATION).json())
 
 streaming = True
+
 filled = set()
+try:
+    orders = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.ORDERS).json()["securitiesAccount"]["orderStrategies"]
+    for order in orders:
+        if order["status"] == "FILLED":
+            filled.add(order["orderId"])
+except KeyError:
+    pass
 
 def parser(order):
     symbol = order["Security"]["Symbol"]
