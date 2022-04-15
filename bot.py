@@ -24,6 +24,8 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 ACCOUNT_ID = os.getenv('ACCOUNT_ID')
 CHANNEL_IDS = os.getenv('CHANNEL_IDS').split(",")
 USER_ID = os.getenv('USER_ID')
+THUMBNAIL = os.getenv('THUMBNAIL')
+FOOTER = os.getenv('FOOTER')
 
 client = auth.client_from_token_file(TOKEN_PATH, API_KEY)
 
@@ -33,6 +35,7 @@ try:
     active_positions = client.get_account(ACCOUNT_ID, fields=Client.Account.Fields.POSITIONS).json()["securitiesAccount"]["positions"]
     for pos in active_positions:
         symbol = pos["instrument"]["symbol"]
+        #may not work here for shares
         curr_positions[symbol] = {"quantity": pos["longQuantity"], "total_cost": pos["longQuantity"] * pos["averagePrice"], "sell_price": 0}
 except KeyError:
     pass
@@ -45,17 +48,11 @@ open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.St
 streaming = True
 filled = set()
 
-def parser(msg_data, msg_type):
-    order = msg_data[msg_type + "Message"]["Order"]
+def parser(order):
     symbol = order["Security"]["Symbol"]
-    option = symbol.split("_")
-    ticker = option[0]
-    strike = option[1][7:]
-    exp = option[1][:6][:2] + "/" + option[1][:6][2:4] + "/" + option[1][:6][4:6]
-    cp = "Call" if option[1][6] == "C" else "Put"
     order_type = order["OrderType"]
     bs = order["OrderInstructions"]
-    num_contracts = int(order["OriginalQuantity"])
+    quantity = int(order["OriginalQuantity"])
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
     try:
@@ -65,7 +62,7 @@ def parser(msg_data, msg_type):
         bid = 0
         ask = 0
     if bs == "Sell":
-        if curr_positions[symbol]["quantity"] - num_contracts > 0:
+        if curr_positions[symbol]["quantity"] - quantity > 0:
             bs = "Trim"
         else:
             avg_cost = curr_positions[symbol]["total_cost"] / curr_positions[symbol]["quantity"]
@@ -73,7 +70,15 @@ def parser(msg_data, msg_type):
                 bs = "Exit" if avg_cost < float(limit_price) else "Cut"
             except TypeError: #market order
                 bs = "Exit" if avg_cost < float(bid) else "Cut"
-    return bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol
+    return bs, order_type, acc_value, quantity, limit_price, bid, ask, symbol
+
+def option_parser(symbol):
+    option = symbol.split("_")
+    ticker = option[0]
+    strike = option[1][7:]
+    exp = option[1][:6][:2] + "/" + option[1][:6][2:4] + "/" + option[1][:6][4:6]
+    cp = "Call" if option[1][6] == "C" else "Put"
+    return ticker, strike, exp, cp
         
 def filter(msg):
     global open_requests
@@ -82,59 +87,68 @@ def filter(msg):
     if msg_type == "SUBSCRIBED":
         return format(Embed(title="Trade Alert Bot Activated"))
     elif msg_type in {"OrderEntryRequest","OrderCancelReplaceRequest", "UROUT"}:
+
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
-        bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol = parser(msg_data, msg_type)
-
+        order = msg_data[msg_type + "Message"]["Order"]
+        bs, order_type, acc_value, quantity, limit_price, bid, ask, symbol = parser(order)
+        sec_cat = order["Security"]["SecurityCategory"]
+        multiplier = 10000 if sec_cat == "Option" else 100
         if bs == "Trim":
-            trim_percentage = str(int(num_contracts/curr_positions[symbol]["quantity"] * 100)) + "%"
-            e = Embed(title="{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp))
-        else:
-            e = Embed(title="{} {} {} {} {}".format(bs, ticker, exp, strike, cp))
+            trim_percentage = str(int(quantity/curr_positions[symbol]["quantity"] * 100)) + "%"
 
+        if msg_type == "UROUT":
+            open_requests -= 1
+            if open_requests == 0 and update_positions.is_running():
+                update_positions.stop()
+        else:
+            open_requests += 1
+            if not update_positions.is_running():
+                update_positions.start()
+            
+        if sec_cat == "Option":
+            ticker, strike, exp, cp = option_parser(symbol)
+            e = Embed(title=f"{bs} {trim_percentage} {ticker} {exp} {strike} {cp}") if bs == "Trim" else Embed(title=f"{bs} {ticker} {exp} {strike} {cp}")
+            if msg_type == "UROUT":
+                if bs == "Trim":
+                    return format(Embed(title="Order Cancelled", description = f"{bs} {trim_percentage} {ticker} {exp} {strike} {cp}", color=0xFF8B00))
+                else:
+                    return format(Embed(title="Order Cancelled", description = f"{bs} {ticker} {exp} {strike} {cp}", color=0xFF8B00))
+
+        elif sec_cat == "Equity":
+            e = Embed(title=f"{bs} {trim_percentage} {symbol}") if bs == "Trim" else Embed(title=f"{bs} {symbol}")
+            if msg_type == "UROUT":
+                if bs == "Trim":
+                    return format(Embed(title="Order Cancelled", description = f"{bs} {trim_percentage} {symbol}", color=0xFF8B00))
+                else:
+                    return format(Embed(title="Order Cancelled", description = f"{bs} {symbol}", color=0xFF8B00))
+        
+        e.description = "Order Placed" if msg_type == "OrderEntryRequest" else "Replacement Order Placed"
         e.add_field(name="Order Type", value=order_type, inline=True)
         e.color = 0xFFFF00
 
         if "Limit" in order_type:
             e.add_field(name="Limit Price", value=limit_price, inline=True)
             if bs == "Buy":
-                e.add_field(name="Position Size", value=str(int(float(limit_price) * 10000.0 * num_contracts / float(acc_value))) + "%")
-        elif "Stop" in order_type:
+                e.add_field(name="Position Size", value=str(int(float(limit_price) * multiplier * quantity / float(acc_value))) + "%")
+        if "Stop" in order_type:
             try:
-                e.add_field(name="Stop Price", value=str(msg_data[msg_type + "Message"]["Order"]["OrderPricing"]["Stop"]), inline=True)
+                e.add_field(name="Stop Price", value=str(order["OrderPricing"]["Stop"]), inline=True)
             except KeyError:
                 pass
         elif order_type == "Market":
-            e.add_field(name="Bid", value= bid, inline=True)
+            e.add_field(name="Bid", value=bid, inline=True)
             e.add_field(name="Ask", value=ask, inline=True)
             if bs == "Buy":
-                e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * 10000.0 * num_contracts / float(acc_value))) + "%")
-
-        if msg_type == "UROUT":
-            open_requests -= 1
-            if open_requests == 0 and update_positions.is_running():
-                update_positions.stop()
-            if bs == "Trim":
-                return format(Embed(title="Order Cancelled", description = "{} {} {} {} {} {}".format(bs, trim_percentage, ticker, exp, strike, cp), color=0xFF8B00))
-            else:
-                return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, exp, strike, cp), color=0xFF8B00))
-        elif msg_type == "OrderEntryRequest":
-            open_requests += 1
-            if not update_positions.is_running():
-                update_positions.start()
-            e.description = "Order Placed"
-        elif msg_type == "OrderCancelReplaceRequest":
-            open_requests += 1
-            if not update_positions.is_running():
-                update_positions.start()
-            e.description = "Replacement Order Placed"
+                e.add_field(name="Position Size", value=str(int((float(bid)+float(ask))/2 * multiplier * quantity / float(acc_value))) + "%")
+        
         return format(e)
     else:
         return None
 
 def format(e):
     e.set_author(name=user.name, icon_url=user.avatar_url)
-    e.set_thumbnail(url="https://www.highstriketrading.com/hosted/images/78/b23e71dc0b420c80120008ffeb837d/Circle-Logo.png")
-    e.set_footer(text="Highstrike Signals")
+    e.set_thumbnail(url=THUMBNAIL)
+    e.set_footer(text=FOOTER)
     return e
 
 bot = commands.Bot(command_prefix='!')
@@ -215,30 +229,42 @@ async def order_fill(symbol, action, quantity, fill_price, acc_value):
     open_requests -= 1
     if open_requests == 0 and update_positions.is_running():
         update_positions.stop()
+
     option = symbol.split("_")
-    ticker = option[0]
-    strike = option[1][7:]
-    exp = option[1][:6][:2] + "/" + option[1][:6][2:4] + "/" + option[1][:6][4:6]
-    cp = "Call" if option[1][6] == "C" else "Put"
+    if len(option) == 2:
+        is_option = True
+        ticker = option[0]
+        strike = option[1][7:]
+        exp = option[1][:6][:2] + "/" + option[1][:6][2:4] + "/" + option[1][:6][4:6]
+        cp = "Call" if option[1][6] == "C" else "Put"
+    else:
+        is_option = False
+    multiplier = 10000 if is_option else 100
     try:
         avg_cost = curr_positions[symbol]["total_cost"] / curr_positions[symbol]["quantity"]
     except ZeroDivisionError:
         avg_cost = curr_positions[symbol]["total_cost"]
+
     if action == "Sell":
         if curr_positions[symbol]["quantity"] > 0:
             trim_percentage = str(int(quantity / (curr_positions[symbol]["quantity"] + quantity) * 100)) + "%"
-            e = Embed(title="Trim {} {} {} {} {}".format(trim_percentage, ticker, exp, strike, cp))
-            e.add_field(name="Position Left", value= str(int(curr_positions[symbol]["total_cost"] / acc_value * 10000)) + "%", inline=True)
+            action = "Trim"
         else:
             action = "Exit" if fill_price - avg_cost > 0 else "Cut"
-    if action != "Sell":
-        e = Embed(title="{} {} {} {} {}".format(action, ticker, exp, strike, cp))
+
+    if is_option:
+        e = Embed(title=f"{action} {trim_percentage} {ticker} {exp} {strike} {cp}") if action == "Trim" else Embed(title=f"{action} {ticker} {exp} {strike} {cp}")
+    else:
+        e = Embed(title=f"{action} {trim_percentage} {symbol}") if action == "Trim" else Embed(title=f"{action} {symbol}")
+
     e.add_field(name="Average Cost", value="{:.2f}".format(avg_cost), inline=True)
     e.add_field(name="Fill Price", value=str(fill_price), inline=True)
     if action == "Buy":
-        e.add_field(name="Total Position", value=str(int(curr_positions[symbol]["total_cost"] / acc_value * 10000)) + "%", inline=True)
+        e.add_field(name="Total Position", value=str(int(curr_positions[symbol]["total_cost"] / acc_value * multiplier)) + "%", inline=True)
     else:
         e.add_field(name="Profit/Loss", value=str(int((fill_price-avg_cost) / avg_cost * 100))+"%", inline=True)
+        if action == "Trim":
+            e.add_field(name="Position Left", value= str(int(curr_positions[symbol]["total_cost"] / acc_value * multiplier)) + "%", inline=True)
     e.color = 0x50f276 if action == "Buy" else 0xFF0000
     e.description = "Order Filled"
     for id in CHANNEL_IDS:
@@ -265,14 +291,14 @@ async def update_positions():
                             if exec_leg["legId"] == leg["legId"]:
                                 partial_amt = exec_leg["quantity"]
                                 price = exec_leg["price"]
-                                if inst == "BUY_TO_OPEN":
+                                if inst == "BUY_TO_OPEN" or inst == "BUY":
                                     updated[symbol] = "Buy"
                                     if curr_positions.get(symbol) == None:
                                         curr_positions[symbol] = {"quantity": partial_amt, "total_cost": price, "sell_price": 0}
                                     else:
                                         curr_positions[symbol]["quantity"] += partial_amt
                                         curr_positions[symbol]["total_cost"] += price
-                                elif inst == "SELL_TO_CLOSE":
+                                elif inst == "SELL_TO_CLOSE" or inst == "SELL":
                                     updated[symbol] = "Sell"
                                     curr_positions[symbol]["quantity"] -= partial_amt
                                     curr_positions[symbol]["sell_price"] += price
