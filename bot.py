@@ -39,6 +39,7 @@ except KeyError:
 
 open_requests = len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.Status.AWAITING_CONDITION).json())
 open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.Status.QUEUED).json())
+open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.Status.WORKING).json())
 open_requests += len(client.get_orders_by_path(ACCOUNT_ID,status=Client.Order.Status.PENDING_ACTIVATION).json())
 
 streaming = True
@@ -57,8 +58,12 @@ def parser(msg_data, msg_type):
     num_contracts = int(order["OriginalQuantity"])
     acc_value = client.get_account(ACCOUNT_ID).json()["securitiesAccount"]["currentBalances"]["liquidationValue"]
     limit_price = None if order_type != "Limit" else "{:0.2f}".format(float(order["OrderPricing"]["Limit"]))
-    bid = "{:0.2f}".format(float(order["OrderPricing"]["Bid"]))
-    ask = "{:0.2f}".format(float(order["OrderPricing"]["Ask"]))
+    try:
+        bid = "{:0.2f}".format(float(order["OrderPricing"]["Bid"]))
+        ask = "{:0.2f}".format(float(order["OrderPricing"]["Ask"]))
+    except KeyError:
+        bid = 0
+        ask = 0
     if bs == "Sell":
         if curr_positions[symbol]["quantity"] - num_contracts > 0:
             bs = "Trim"
@@ -77,11 +82,6 @@ def filter(msg):
     if msg_type == "SUBSCRIBED":
         return format(Embed(title="Trade Alert Bot Activated"))
     elif msg_type in {"OrderEntryRequest","OrderCancelReplaceRequest", "UROUT"}:
-        if msg_type in {"OrderEntryRequest","OrderCancelReplaceRequest"}:
-            open_requests += 1
-            if not update_positions.is_running():
-                update_positions.start()
-
         msg_data = xmltodict.parse(msg["content"][0]["MESSAGE_DATA"])
         bs, ticker, strike, exp, cp, order_type, acc_value, num_contracts, limit_price, bid, ask, symbol = parser(msg_data, msg_type)
 
@@ -118,8 +118,14 @@ def filter(msg):
             else:
                 return format(Embed(title="Order Cancelled", description = "{} {} {} {} {}".format(bs, ticker, exp, strike, cp), color=0xFF8B00))
         elif msg_type == "OrderEntryRequest":
+            open_requests += 1
+            if not update_positions.is_running():
+                update_positions.start()
             e.description = "Order Placed"
         elif msg_type == "OrderCancelReplaceRequest":
+            open_requests += 1
+            if not update_positions.is_running():
+                update_positions.start()
             e.description = "Replacement Order Placed"
         return format(e)
     else:
@@ -218,16 +224,19 @@ async def order_fill(symbol, action, quantity, fill_price, acc_value):
         avg_cost = curr_positions[symbol]["total_cost"] / curr_positions[symbol]["quantity"]
     except ZeroDivisionError:
         avg_cost = curr_positions[symbol]["total_cost"]
-    if action == "Sell" and curr_positions[symbol]["quantity"] > 0:
+    if action == "Sell":
+        if curr_positions[symbol]["quantity"] > 0:
             trim_percentage = str(int(quantity / (curr_positions[symbol]["quantity"] + quantity) * 100)) + "%"
             e = Embed(title="Trim {} {} {} {} {}".format(trim_percentage, ticker, exp, strike, cp))
-            e.add_field(name="Position Left", value= str(int(curr_positions[symbol]["total_cost"] / acc_value * 100)) + "%", inline=True)
-    else:
+            e.add_field(name="Position Left", value= str(int(curr_positions[symbol]["total_cost"] / acc_value * 10000)) + "%", inline=True)
+        else:
+            action = "Exit" if fill_price - avg_cost > 0 else "Cut"
+    if action != "Sell":
         e = Embed(title="{} {} {} {} {}".format(action, ticker, exp, strike, cp))
     e.add_field(name="Average Cost", value="{:.2f}".format(avg_cost), inline=True)
     e.add_field(name="Fill Price", value=str(fill_price), inline=True)
     if action == "Buy":
-        e.add_field(name="Total Position", value=str(int(curr_positions[symbol]["total_cost"] / acc_value * 100)) + "%", inline=True)
+        e.add_field(name="Total Position", value=str(int(curr_positions[symbol]["total_cost"] / acc_value * 10000)) + "%", inline=True)
     else:
         e.add_field(name="Profit/Loss", value=str(int((fill_price-avg_cost) / avg_cost * 100))+"%", inline=True)
     e.color = 0x50f276 if action == "Buy" else 0xFF0000
@@ -269,12 +278,12 @@ async def update_positions():
                                     curr_positions[symbol]["sell_price"] += price
         for symbol in updated:
             if updated[symbol] == "Buy":
-                quantity = curr_positions[symbol]["quantity"] - prev[symbol]["quantity"]
-                fill_price = (curr_positions[symbol]["total_cost"] - prev[symbol]["total_cost"]) / quantity
-                for id in CHANNEL_IDS:
-                    channel = bot.get_channel(int(id))
-                    await channel.send(curr_positions)
-                    await channel.send(f"Buy {symbol} {quantity} {fill_price}")
+                if symbol in prev:
+                    quantity = curr_positions[symbol]["quantity"] - prev[symbol]["quantity"]
+                    fill_price = (curr_positions[symbol]["total_cost"] - prev[symbol]["total_cost"]) / quantity
+                else:
+                    quantity = curr_positions[symbol]["quantity"]
+                    fill_price = curr_positions[symbol]["total_cost"] / quantity
                 await order_fill(symbol, "Buy", quantity, fill_price, acc_value)
             else:
                 quantity = prev[symbol]["quantity"] - curr_positions[symbol]["quantity"]
